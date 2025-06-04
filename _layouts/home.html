@@ -1,0 +1,30 @@
+---
+layout: default
+---
+<div class="container">
+  <aside class="sidebar">
+    <nav>
+      <h1><a href="{{ '/' | relative_url }}">{{ site.title }}</a></h1>
+      <ul>
+        <li><a href="{{ '/about/' | relative_url }}">about</a></li>
+        <li><a href="{{ '/projects/' | relative_url }}">projects</a></li>
+        <li><a href="{{ '/notes/' | relative_url }}">notes</a></li> <!-- This should link to an archive page -->
+        <li><a href="https://github.com/{{ site.github_username }}" target="_blank" rel="noopener noreferrer">github</a></li>
+        <li><a href="{{ '/feed.xml' | relative_url }}">rss</a></li>
+      </ul>
+    </nav>
+  </aside>
+
+  <main class="content-feed">
+    <ul>
+      {% for post in site.posts %}
+        <li>
+          <a href="{{ post.url | relative_url }}">
+            {% if post.starred == true %}☆ {% endif %}{{ post.title }}
+          </a>
+          <span class="post-date">{{ post.date | date: "%Y.%m.%d" }}</span>
+        </li>
+      {% endfor %}
+    </ul>
+  </main>
+</div>

@@ -1,0 +1,147 @@
+/* Basic Reset */
+*, *::before, *::after {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+body {
+    font-family: "Menlo", "Monaco", "Consolas", "Liberation Mono", "Courier New", monospace;
+    font-size: 13px; /* taylor.town appears to use a small font size */
+    line-height: 1.6;
+    color: #333; /* Slightly softer than pure black */
+    background-color: #fff;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    padding: 20px 10px; /* Some padding around the whole page */
+}
+
+@media (prefers-color-scheme: dark) {
+    body {
+        color: #ccc;
+        background-color: #1e1e1e; /* Dark background */
+    }
+}
+
+a {
+    color: inherit;
+    text-decoration: none;
+}
+a:hover {
+    text-decoration: underline;
+}
+
+/* Main container for the two-column layout */
+.container {
+    display: flex;
+    max-width: 750px; /* Adjust overall width to match the dense look */
+    margin: 0 auto; /* Center it */
+}
+
+/* Sidebar (Left Navigation) */
+.sidebar {
+    width: 120px; /* Narrow sidebar like the image */
+    flex-shrink: 0;
+    padding-right: 25px;
+    font-size: 1em; /* Keep nav font size same as body */
+}
+
+.sidebar h1 {
+    font-size: 1em; /* Same size as other text */
+    font-weight: bold; /* taylor.town name is bold */
+    margin-bottom: 1.6em; /* Spacing similar to line-height */
+}
+
+.sidebar nav ul {
+    list-style: none;
+}
+
+.sidebar nav ul li {
+    margin-bottom: 0.8em; /* Space between nav items */
+}
+
+/* Content Feed (Right Column - Post List) */
+.content-feed {
+    flex-grow: 1;
+}
+
+.content-feed ul {
+    list-style: none;
+}
+
+.content-feed ul li {
+    margin-bottom: 0.6em; /* Tighter spacing between post items */
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    line-height: 1.5; /* Slightly tighter line-height for list items */
+}
+
+.content-feed ul li a {
+    /* Title takes up most space, date is on the right */
+    margin-right: 10px; /* Space before date */
+}
+
+.post-date {
+    font-size: 1em; /* Same size as post title */
+    color: #777;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+@media (prefers-color-scheme: dark) {
+    .post-date {
+        color: #888;
+    }
+}
+
+/* Styling for single post/page content */
+.page-content-wrapper {
+    max-width: 650px; /* Standard reading width */
+    margin: 20px auto; /* Center content on single pages */
+    padding: 0 15px;
+}
+
+.page-content-wrapper h1,
+.page-content-wrapper h2,
+.page-content-wrapper h3 {
+    margin-top: 1.8em;
+    margin-bottom: 0.6em;
+    line-height: 1.3;
+    font-weight: bold;
+}
+.page-content-wrapper h1 { font-size: 1.6em; }
+.page-content-wrapper h2 { font-size: 1.4em; }
+.page-content-wrapper h3 { font-size: 1.2em; }
+
+
+.page-content-wrapper p,
+.page-content-wrapper ul,
+.page-content-wrapper ol {
+    margin-bottom: 1.2em;
+}
+.page-content-wrapper ul, .page-content-wrapper ol {
+    margin-left: 1.8em;
+}
+
+.page-content-wrapper pre {
+    background-color: #f0f0f0;
+    padding: 10px;
+    overflow-x: auto;
+    margin-bottom: 1.2em;
+    border-radius: 3px;
+    font-size: 0.95em;
+}
+.page-content-wrapper code:not(pre code) { /* Inline code */
+    background-color: #f0f0f0;
+    padding: 0.1em 0.3em;
+    border-radius: 3px;
+    font-size: 0.95em;
+}
+
+@media (prefers-color-scheme: dark) {
+    .page-content-wrapper pre,
+    .page-content-wrapper code:not(pre code) {
+        background-color: #2d2d2d;
+    }
+}

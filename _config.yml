@@ -1,0 +1,31 @@
+title: Christian Motta # Your Name or Site Title
+author: Christian Motta
+email: chrismotta2005@gmail.com
+description: "A collection of thoughts, projects, and explorations."
+url: "https://buba278.github.io" # Your GitHub Pages URL (e.g., https://yourusername.github.io)
+github_username: buba278 # Your GitHub username
+
+# Permalink structure for posts
+permalink: /notes/:year/:month/:day/:title/ # Or choose another structure
+
+markdown: kramdown
+kramdown:
+  input: GFM
+  hard_wrap: false
+  # Add this line:
+  parse_block_html: true # This tells Kramdown to process Markdown inside HTML blocks
+
+# Plugins (jekyll-feed is included in Gemfile)
+plugins:
+  - jekyll-feed
+
+# Exclude from processing
+exclude:
+  - Gemfile
+  - Gemfile.lock
+  - node_modules
+  - vendor/bundle/
+  - vendor/cache/
+  - vendor/gems/
+  - vendor/ruby/
+  - README.md

@@ -1,0 +1,19 @@
+# Jekyll
+_site/
+.sass-cache/
+.jekyll-cache/
+.jekyll-metadata
+Gemfile.lock # Usually committed, but optional if everyone uses `bundle install` freshly
+             # If you want to ensure exact gem versions, KEEP Gemfile.lock and REMOVE this line.
+             # For GitHub Pages, it often rebuilds with its own versions, so ignoring can be fine.
+             # However, for reproducible local builds, it's good to commit Gemfile.lock.
+             # Let's lean towards COMMITTING Gemfile.lock for consistency.
+
+# Bundler
+vendor/bundle/ # This is where `bundle install --path vendor/bundle` stores gems
+
+# Optional editor/OS files
+.DS_Store
+Thumbs.db
+*.swp
+*~

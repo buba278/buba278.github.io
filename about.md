@@ -1,9 +1,9 @@
 ---
 layout: default # Use the basic default layout
-title: About Christian
+title: about me
 ---
 
-<div class="page-content-wrapper"> <!-- Wrapper for consistent styling -->
+<div class="page-content-wrapper">
 
 # About Me
 

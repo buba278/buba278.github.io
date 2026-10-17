@@ -1,0 +1,1013 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>SensorTile Live</title>
+<meta name="description" content="Live heading, step and dead-reckoning views for an ST SensorTile over Bluetooth or USB serial.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text x=%2250%22 y=%22.85em%22 font-size=%2270%22 text-anchor=%22middle%22 font-family=%22monospace%22>CM</text></svg>">
+<style>
+/* layout: the website's two-column page, a 120px text sidebar beside one live canvas */
+:root {
+  --bg: #fff;
+  --fg: #333;
+  --muted: #777;
+  --line: #d2d2d2;
+  --faint: #ececec;
+  --code: #f0f0f0;
+  --mono: "Menlo", "Monaco", "Consolas", "Liberation Mono", "Courier New", monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #1e1e1e; --fg: #ccc; --muted: #888; --line: #474747; --faint: #2a2a2a; --code: #2d2d2d;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #1e1e1e; --fg: #ccc; --muted: #888; --line: #474747; --faint: #2a2a2a; --code: #2d2d2d;
+  color-scheme: dark;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { background: var(--bg); }
+body {
+  font: 13px/1.6 var(--mono);
+  color: var(--fg);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  padding-block: 20px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+a, .link {
+  color: inherit; text-decoration: none; background: none; border: 0;
+  font: inherit; cursor: pointer; padding: 0;
+}
+a:hover, .link:hover:not(:disabled) { text-decoration: underline; }
+.link:disabled { color: var(--muted); cursor: default; }
+:focus-visible { outline: 1px dashed var(--fg); outline-offset: 3px; }
+
+.container { display: flex; max-width: 860px; margin: 0 auto; gap: 25px; }
+.sidebar { width: 120px; flex-shrink: 0; }
+.sidebar h1 { font-size: 1em; font-weight: bold; margin-bottom: 1.6em; }
+.back { display: inline-block; color: var(--muted); margin-bottom: .8em; }
+.sidebar ul { list-style: none; display: grid; gap: .8em; }
+.nav a { display: flex; justify-content: space-between; color: var(--muted); }
+.nav a[aria-current="page"] { color: var(--fg); }
+.nav kbd { font: inherit; color: var(--muted); opacity: .55; }
+.group { margin-top: 2.4em; }
+.group h2 { font-size: 1em; font-weight: normal; color: var(--muted); margin-bottom: .8em; }
+.sources .link { color: var(--muted); text-align: left; display: flex; align-items: center; gap: 7px; }
+.sources .link[aria-pressed="true"] { color: var(--fg); }
+.dot { width: 5px; height: 5px; border-radius: 50%; background: currentColor; opacity: 0; flex-shrink: 0; }
+.sources .link[aria-pressed="true"] .dot { opacity: .45; }
+.sources .link[aria-pressed="true"][data-conn="live"] .dot { opacity: 1; }
+.status { color: var(--muted); margin-top: .8em; min-height: 3.2em; overflow-wrap: anywhere; }
+
+main { flex: 1; min-width: 0; }
+.head { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
+.head .meta { color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.lede { color: var(--muted); margin: .4em 0 1.6em; max-width: 60ch; }
+.stage canvas { display: block; width: 100%; max-width: 100%; touch-action: none; }
+.sq { aspect-ratio: 1; max-width: 400px !important; }
+.wide { aspect-ratio: 4 / 3; }
+.scope { aspect-ratio: 2 / 1; }
+
+.readout { list-style: none; margin-top: 1.6em; display: grid; gap: .6em; max-width: 400px; }
+.readout li { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
+.readout .k { color: var(--muted); }
+.readout .v { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.readout .v .link { color: var(--muted); padding: 0 .35em; }
+.readout .v .link:hover { color: var(--fg); }
+.sub { margin-top: 2.4em; color: var(--muted); }
+.actions { margin-top: 1.6em; display: flex; gap: 1.6em; flex-wrap: wrap; }
+.legend { display: flex; gap: 1.6em; margin-top: .8em; color: var(--muted); }
+.legend span { display: inline-flex; align-items: center; gap: 7px; }
+.legend i { width: 6px; height: 6px; border-radius: 50%; background: var(--fg); }
+.legend i.raw { background: var(--muted); opacity: .6; }
+pre {
+  background: var(--code); padding: 10px; border-radius: 3px; overflow-x: auto;
+  font: .95em/1.6 var(--mono); margin-top: .8em; max-width: 400px;
+}
+
+.meter { position: relative; height: 13px; max-width: 400px; margin-top: 1.6em; }
+.meter::before { content: ""; position: absolute; left: 0; right: 0; top: 6px; height: 1px; background: var(--line); }
+.meter .band { position: absolute; left: 25%; right: 25%; top: 5px; height: 3px; background: var(--line); }
+.meter .mid { position: absolute; left: 50%; top: 2px; width: 1px; height: 9px; background: var(--muted); }
+.meter .mark {
+  position: absolute; top: 2px; width: 9px; height: 9px; margin-left: -4.5px; border-radius: 50%;
+  background: var(--fg); border: 1.5px solid var(--fg); left: 50%; transition: left .15s linear;
+}
+.meter .mark.held { background: var(--bg); }
+
+@media (max-width: 640px) {
+  .container { flex-direction: column; gap: 1.6em; }
+  .sidebar { width: auto; }
+  .sidebar h1 { margin-bottom: .8em; }
+  .sidebar h1 br { display: none; }
+  .sidebar ul { grid-auto-flow: column; justify-content: start; gap: 1.6em; }
+  .nav kbd { display: none; }
+  .group { margin-top: 1.2em; }
+  .status { min-height: 0; }
+}
+@media (prefers-reduced-motion: reduce) { .meter .mark { transition: none; } }
+</style>
+</head>
+<body>
+<div class="container">
+  <aside class="sidebar">
+    <a class="back" href="../">← tools</a>
+    <h1>SensorTile<br> Live</h1>
+    <nav>
+      <ul class="nav">
+        <li><a href="#compass" data-view="compass">compass <kbd>1</kbd></a></li>
+        <li><a href="#trail" data-view="trail">trail <kbd>2</kbd></a></li>
+        <li><a href="#steps" data-view="steps">steps <kbd>3</kbd></a></li>
+        <li><a href="#calibrate" data-view="calibrate">calibrate <kbd>4</kbd></a></li>
+      </ul>
+    </nav>
+    <div class="group">
+      <h2>source</h2>
+      <ul class="sources">
+        <li><button class="link" id="src-demo" data-source="demo" aria-pressed="false"><span class="dot"></span>demo</button></li>
+        <li><button class="link" id="src-bluetooth" data-source="bluetooth" aria-pressed="false"><span class="dot"></span>bluetooth</button></li>
+        <li><button class="link" id="src-serial" data-source="serial" aria-pressed="false"><span class="dot"></span>serial</button></li>
+      </ul>
+      <p class="status" id="status" aria-live="polite"></p>
+    </div>
+  </aside>
+
+  <main>
+    <div class="head"><span id="viewTitle">compass</span><span class="meta" id="meta"></span></div>
+
+    <section class="view" id="view-compass">
+      <p class="lede">Heading from the magnetometer. When the field strength drifts away from the baseline, it holds the last good value.</p>
+      <div class="stage"><canvas id="cv-compass" class="sq" aria-label="compass dial"></canvas></div>
+      <div class="meter" aria-hidden="true"><span class="band"></span><span class="mid"></span><span class="mark" id="devMark"></span></div>
+      <ul class="readout">
+        <li><span class="k">heading</span><span class="v" id="r-heading">–</span></li>
+        <li><span class="k">field</span><span class="v" id="r-field">–</span></li>
+        <li><span class="k">baseline</span><span class="v" id="r-baseline">–</span></li>
+        <li><span class="k">deviation</span><span class="v" id="r-dev">–</span></li>
+        <li><span class="k">computed by</span><span class="v" id="r-from">–</span></li>
+      </ul>
+    </section>
+
+    <section class="view" id="view-trail" hidden>
+      <p class="lede">Each step moves the dot one stride in the current heading. Dashed segments were walked while the heading was held.</p>
+      <div class="stage"><canvas id="cv-trail" class="wide" aria-label="dead reckoning trail"></canvas></div>
+      <ul class="readout">
+        <li><span class="k">steps</span><span class="v" id="r-tsteps">0</span></li>
+        <li><span class="k">distance</span><span class="v" id="r-dist">0.0 m</span></li>
+        <li><span class="k">from start</span><span class="v" id="r-disp">0.0 m</span></li>
+        <li><span class="k">stride</span><span class="v"><button class="link" data-step="stride" data-d="-1" aria-label="shorter stride">−</button><span id="s-stride"></span><button class="link" data-step="stride" data-d="1" aria-label="longer stride">+</button></span></li>
+      </ul>
+      <div class="actions"><button class="link" id="clearTrail">[clear trail]</button></div>
+    </section>
+
+    <section class="view" id="view-steps" hidden>
+      <p class="lede">Smoothed acceleration minus 1 g. A step is the highest point of each crossing above the dashed line. Drag the line to retune it.</p>
+      <div class="stage"><canvas id="cv-scope" class="scope" aria-label="acceleration trace with detected steps"></canvas></div>
+      <ul class="readout">
+        <li><span class="k">detected here</span><span class="v" id="r-lsteps">0</span></li>
+        <li><span class="k">from device</span><span class="v" id="r-dsteps">–</span></li>
+        <li><span class="k">cadence</span><span class="v" id="r-cad">–</span></li>
+        <li><span class="k">threshold</span><span class="v"><button class="link" data-step="stepThr" data-d="-1" aria-label="lower threshold">−</button><span id="s-stepThr"></span><button class="link" data-step="stepThr" data-d="1" aria-label="raise threshold">+</button></span></li>
+        <li><span class="k">min gap</span><span class="v"><button class="link" data-step="stepGap" data-d="-1" aria-label="shorter gap">−</button><span id="s-stepGap"></span><button class="link" data-step="stepGap" data-d="1" aria-label="longer gap">+</button></span></li>
+      </ul>
+    </section>
+
+    <section class="view" id="view-calibrate" hidden>
+      <p class="lede">Hold the board flat away from metal and turn it through a full circle. The offsets centre the circle and the baseline records what a clean field looks like.</p>
+      <div class="stage"><canvas id="cv-cal" class="sq" aria-label="magnetometer x against y"></canvas></div>
+      <div class="legend"><span><i class="raw"></i>raw</span><span><i></i>calibrated</span></div>
+      <ul class="readout">
+        <li><span class="k">offset x</span><span class="v" id="r-offx">–</span></li>
+        <li><span class="k">offset y</span><span class="v" id="r-offy">–</span></li>
+        <li><span class="k">scale y</span><span class="v" id="r-scy">–</span></li>
+        <li><span class="k">baseline</span><span class="v" id="r-base2">–</span></li>
+        <li><span class="k">coverage</span><span class="v" id="r-cov">–</span></li>
+      </ul>
+      <div class="actions">
+        <button class="link" id="capStart">[start capture]</button>
+        <button class="link" id="capApply" hidden>[apply]</button>
+        <button class="link" id="capCancel" hidden>[cancel]</button>
+        <button class="link" id="capReset">[reset]</button>
+      </div>
+
+      <p class="sub">settings</p>
+      <ul class="readout">
+        <li><span class="k">hold beyond</span><span class="v"><button class="link" data-step="holdPct" data-d="-1" aria-label="lower hold threshold">−</button><span id="s-holdPct"></span><button class="link" data-step="holdPct" data-d="1" aria-label="raise hold threshold">+</button></span></li>
+        <li><span class="k">declination</span><span class="v"><button class="link" data-step="decl" data-d="-1" aria-label="decrease declination">−</button><span id="s-decl"></span><button class="link" data-step="decl" data-d="1" aria-label="increase declination">+</button></span></li>
+      </ul>
+
+      <p class="sub">for the firmware</p>
+      <pre id="snippet"></pre>
+      <div class="actions"><button class="link" id="copySnippet">[copy]</button></div>
+    </section>
+  </main>
+</div>
+
+<script>
+(() => {
+"use strict";
+
+/* ---------- storage and settings ---------- */
+const store = {
+  get(k, d) { try { const v = localStorage.getItem("stl." + k); return v == null ? d : JSON.parse(v); } catch { return d; } },
+  set(k, v) { try { localStorage.setItem("stl." + k, JSON.stringify(v)); } catch {} },
+};
+
+/* BLE layout from sensor_service.c AccGyroMag_Update: tick>>3, acc xyz, steps*10, heading*10, distance, mag xyz */
+const SVC = "00000000-0001-11e1-9ab4-0002a5d5c51b";
+const CHR = "00e00000-0001-11e1-ac36-0002a5d5c51b";
+
+const STEPS = {
+  holdPct: { d: 1, min: 3, max: 50, fmt: v => `±${v}%` },
+  stride:  { d: 0.05, min: 0.3, max: 1.2, fmt: v => `${v.toFixed(2)} m` },
+  decl:    { d: 1, min: -40, max: 40, fmt: v => `${v > 0 ? "+" : ""}${v}°` },
+  stepThr: { d: 0.01, min: 0.02, max: 1.5, fmt: v => `${v.toFixed(2)} g` },
+  stepGap: { d: 20, min: 100, max: 1000, fmt: v => `${v} ms` },
+};
+const settings = Object.assign({ holdPct: 15, stride: 0.70, decl: 0, stepThr: 0.15, stepGap: 300 }, store.get("settings", {}));
+
+const DEMO_H = 230, DEMO_Z = -520; /* roughly Auckland: ~230 mG horizontal, steep downward dip */
+const DEMO_CAL = { offX: 60, offY: -35, scaleY: +(1 / 0.93).toFixed(3), baseline: Math.round(Math.hypot(DEMO_H, DEMO_Z)) };
+const NO_CAL = { offX: 0, offY: 0, scaleY: 1, baseline: null };
+const cals = Object.assign({ demo: { ...DEMO_CAL }, device: { ...NO_CAL } }, store.get("cals", {}));
+
+/* ---------- live state ---------- */
+let source = null, conn = "idle", statusMsg = "", stopSource = null;
+let sampleTimes = [], lastAcc = null, capture = null;
+let S;
+
+function resetData() {
+  S = {
+    hx: null, hy: null, B: null, dev: 0, held: false, releaseAt: null, localOut: null,
+    deviceHeading: null, deviceHeld: null, deviceSteps: null,
+    raw: [], sig: [], marks: [], stepTimes: [],
+    lp: null, peak: null, lastStepT: -1e9, tNow: null, localSteps: 0,
+    trail: [{ x: 0, y: 0, h: 0, held: false, n: 0 }], dist: 0, ripple: -1e9,
+  };
+  sampleTimes = []; lastAcc = null; disp = null;
+}
+
+const calKey = () => (source === "demo" ? "demo" : "device");
+const cal = () => cals[calKey()];
+const headingOut = () => (S.deviceHeading != null ? S.deviceHeading : S.localOut);
+const heldOut = () => (S.deviceHeld != null ? S.deviceHeld : S.held);
+
+/* ---------- processing ---------- */
+function onSample(s) {
+  const now = performance.now();
+  const t = s.t != null ? s.t : now;
+  sampleTimes.push(now);
+  while (sampleTimes.length && now - sampleTimes[0] > 1000) sampleTimes.shift();
+
+  if (s.ax != null) lastAcc = [s.ax, s.ay, s.az];
+  if (s.mx != null) processMag(s, t);
+  if (s.heading != null) S.deviceHeading = ((s.heading % 360) + 360) % 360;
+  if (s.held != null) S.deviceHeld = !!s.held;
+  if (s.ax != null) processAcc(t);
+  if (s.steps != null) processDeviceSteps(s.steps);
+}
+
+function processMag(s, t) {
+  const c = cal();
+  const x = s.mx - c.offX, y = (s.my - c.offY) * c.scaleY, z = s.mz;
+  S.raw.push([s.mx, s.my]);
+  if (S.raw.length > 1500) S.raw.shift();
+  if (capture) capture.pts.push([s.mx, s.my, s.mz]);
+
+  /* low-pass the vector, not the angle, so 359 -> 0 doesn't average to 180 */
+  S.hx = S.hx == null ? x : S.hx + 0.2 * (x - S.hx);
+  S.hy = S.hy == null ? y : S.hy + 0.2 * (y - S.hy);
+  const B = Math.hypot(x, y, z);
+  S.B = S.B == null ? B : S.B + 0.3 * (B - S.B);
+  S.dev = c.baseline ? (S.B - c.baseline) / c.baseline : 0;
+
+  const thr = settings.holdPct / 100;
+  if (!c.baseline) S.held = false;
+  else if (Math.abs(S.dev) > thr) { S.held = true; S.releaseAt = null; }
+  else if (S.held) {
+    /* release only once it has sat well inside the limit for a moment */
+    if (Math.abs(S.dev) < thr * 0.7) {
+      if (S.releaseAt == null) S.releaseAt = t;
+      if (t - S.releaseAt > 400) S.held = false;
+    } else S.releaseAt = null;
+  }
+
+  const h = (Math.atan2(-S.hy, S.hx) * 180 / Math.PI + settings.decl + 720) % 360;
+  if (!S.held || S.localOut == null) S.localOut = h;
+}
+
+function processAcc(t) {
+  const [ax, ay, az] = lastAcc;
+  const m = Math.hypot(ax, ay, az) / 1000 - 1;
+  S.lp = S.lp == null ? m : S.lp + 0.35 * (m - S.lp);
+  const v = S.lp;
+  S.tNow = t;
+  S.sig.push({ t, v });
+  while (S.sig.length && S.sig[0].t < t - 12000) S.sig.shift();
+
+  if (v > settings.stepThr) {
+    if (!S.peak || v > S.peak.v) S.peak = { t, v };
+  } else if (S.peak) {
+    if (S.peak.t - S.lastStepT >= settings.stepGap) {
+      S.lastStepT = S.peak.t;
+      S.marks.push({ t: S.peak.t, v: S.peak.v, born: performance.now() });
+      S.stepTimes.push(S.peak.t);
+      S.localSteps++;
+      if (S.deviceSteps == null) advance();
+    }
+    S.peak = null;
+  }
+  while (S.marks.length && S.marks[0].t < t - 12000) S.marks.shift();
+  while (S.stepTimes.length && S.stepTimes[0] < t - 6000) S.stepTimes.shift();
+}
+
+function processDeviceSteps(n) {
+  if (S.deviceSteps == null) { S.deviceSteps = n; return; }
+  let d = n - S.deviceSteps;
+  if (d < 0) d += 6553.6; /* steps*10 wraps a uint16 on the BLE side */
+  d = Math.round(d);
+  if (d > 0 && d < 20) for (let i = 0; i < d; i++) advance();
+  S.deviceSteps = n;
+}
+
+function advance() {
+  const h = headingOut();
+  if (h == null) return;
+  const p = S.trail[S.trail.length - 1];
+  const r = h * Math.PI / 180;
+  S.trail.push({ x: p.x + settings.stride * Math.sin(r), y: p.y + settings.stride * Math.cos(r), h, held: heldOut(), n: p.n + 1 });
+  S.dist += settings.stride;
+  S.ripple = performance.now();
+  if (S.trail.length > 6000) S.trail.shift();
+}
+
+/* ---------- sources ---------- */
+function friendlyErr(msg) { const e = new Error(msg); e.friendly = true; return e; }
+
+function startDemo() {
+  /* walks an 8 x 5 m rectangle past a steel rack near the south leg */
+  const legs = [[0, 8], [90, 5], [180, 8], [270, 5]];
+  const dt = 20, cadence = 1.8, speed = 0.7 * cadence;
+  let simT = 0, leg = 0, along = 0, h = 0, phase = 0, mode = "walk", target = 0, pause = 0, nextLeg = true;
+  const pos = { x: 0, y: 0 };
+  const noise = k => (Math.random() + Math.random() + Math.random() - 1.5) * k;
+  let last = performance.now(), wasCapturing = false;
+
+  function tick() {
+    const sdt = dt / 1000;
+    if (capture) {
+      wasCapturing = true;
+      h = (h + 55 * sdt) % 360;
+      return false;
+    }
+    if (wasCapturing) { wasCapturing = false; mode = "turn"; target = legs[leg][0]; pause = 300; nextLeg = false; }
+    if (mode === "walk") {
+      const r = legs[leg][0] * Math.PI / 180;
+      along += speed * sdt;
+      pos.x += Math.sin(r) * speed * sdt;
+      pos.y += Math.cos(r) * speed * sdt;
+      phase += 2 * Math.PI * cadence * sdt;
+      h = legs[leg][0] + 2 * Math.sin(phase / 2);
+      if (along >= legs[leg][1]) { mode = "turn"; target = legs[(leg + 1) % 4][0]; pause = 700; nextLeg = true; }
+      return true;
+    }
+    if (pause > 0) { pause -= dt; return false; }
+    const d = ((target - h + 540) % 360) - 180;
+    const stepDeg = 110 * sdt;
+    if (Math.abs(d) <= stepDeg) {
+      h = target;
+      if (nextLeg) leg = (leg + 1) % 4;
+      along = nextLeg ? 0 : along;
+      mode = "walk";
+    } else h += Math.sign(d) * stepDeg;
+    return false;
+  }
+
+  function sample(walking) {
+    const r = h * Math.PI / 180;
+    let mx = DEMO_H * Math.cos(r), my = -DEMO_H * Math.sin(r), mz = DEMO_Z;
+    const f = Math.exp(-((pos.x - 5.9) ** 2 + (pos.y - 4) ** 2) / 1.2);
+    mx += 260 * f; my += 200 * f; mz += 220 * f;
+    const az = walking ? 1000 + 230 * Math.sin(phase) + 70 * Math.sin(2 * phase + 0.6) : 1000;
+    return {
+      t: simT,
+      ax: (walking ? 80 * Math.sin(phase / 2) : 0) + noise(25),
+      ay: (walking ? 50 * Math.cos(phase) : 0) + noise(25),
+      az: az + noise(25),
+      mx: Math.round(mx + 60 + noise(4)),
+      my: Math.round(my * 0.93 - 35 + noise(4)),
+      mz: Math.round(mz + noise(4)),
+    };
+  }
+
+  const id = setInterval(() => {
+    const now = performance.now();
+    const n = Math.min(10, Math.floor((now - last) / dt));
+    if (n <= 0) return;
+    last = n === 10 ? now : last + n * dt;
+    for (let i = 0; i < n; i++) { simT += dt; onSample(sample(tick())); }
+  }, dt);
+  statusMsg = "simulated walk";
+  return async () => clearInterval(id);
+}
+
+async function startBle() {
+  if (!navigator.bluetooth) throw friendlyErr("Bluetooth needs Chrome or Edge on desktop or Android.");
+  const dev = await navigator.bluetooth.requestDevice({ acceptAllDevices: true, optionalServices: [SVC] });
+  statusMsg = "connecting to " + (dev.name || "device"); renderSources();
+  const server = await dev.gatt.connect();
+  const ch = await (await server.getPrimaryService(SVC)).getCharacteristic(CHR);
+  let stop = null;
+  const onVal = e => {
+    const d = e.target.value;
+    if (d.byteLength < 20) return;
+    onSample({
+      ax: d.getInt16(2, true), ay: d.getInt16(4, true), az: d.getInt16(6, true),
+      steps: d.getUint16(8, true) / 10, heading: d.getUint16(10, true) / 10,
+      mx: d.getInt16(14, true), my: d.getInt16(16, true), mz: d.getInt16(18, true),
+    });
+  };
+  const onDisc = () => {
+    if (stopSource === stop) { stopSource = null; conn = "idle"; statusMsg = "Bluetooth disconnected. Choose bluetooth to reconnect."; renderSources(); }
+  };
+  ch.addEventListener("characteristicvaluechanged", onVal);
+  dev.addEventListener("gattserverdisconnected", onDisc);
+  await ch.startNotifications();
+  statusMsg = dev.name || "connected";
+  stop = async () => {
+    dev.removeEventListener("gattserverdisconnected", onDisc);
+    ch.removeEventListener("characteristicvaluechanged", onVal);
+    if (dev.gatt.connected) dev.gatt.disconnect();
+  };
+  return stop;
+}
+
+function parseLine(line) {
+  let m;
+  /* the firmware's current debug prints */
+  if ((m = line.match(/^MAG=\s*(-?\d+),\s*(-?\d+),\s*(-?\d+)/))) return onSample({ mx: +m[1], my: +m[2], mz: +m[3] });
+  if ((m = line.match(/^ACC=\s*(-?\d+),\s*(-?\d+),\s*(-?\d+)/))) return onSample({ ax: +m[1], ay: +m[2], az: +m[3] });
+  /* log mode: t,ax,ay,az,mx,my,mz[,steps,heading*10,held] */
+  const f = line.split(",");
+  if (f.length < 7) return;
+  const n = f.map(Number);
+  if (n.slice(0, 7).some(Number.isNaN)) return;
+  onSample({
+    t: n[0], ax: n[1], ay: n[2], az: n[3], mx: n[4], my: n[5], mz: n[6],
+    steps: f.length > 7 && !isNaN(n[7]) ? n[7] : null,
+    heading: f.length > 8 && !isNaN(n[8]) ? n[8] / 10 : null,
+    held: f.length > 9 && !isNaN(n[9]) ? n[9] : null,
+  });
+}
+
+async function startSerial() {
+  if (!navigator.serial) throw friendlyErr("Serial needs Chrome or Edge on desktop.");
+  const port = await navigator.serial.requestPort();
+  await port.open({ baudRate: 115200 });
+  let reader = null, closed = false, stop = null;
+  const loop = (async () => {
+    const dec = new TextDecoder();
+    let buf = "";
+    while (port.readable && !closed) {
+      reader = port.readable.getReader();
+      try {
+        for (;;) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          buf += dec.decode(value, { stream: true });
+          let i;
+          while ((i = buf.indexOf("\n")) >= 0) { parseLine(buf.slice(0, i).trim()); buf = buf.slice(i + 1); }
+          if (buf.length > 4096) buf = "";
+        }
+      } catch { break; } finally { reader.releaseLock(); }
+    }
+    if (!closed && stopSource === stop) { stopSource = null; conn = "idle"; statusMsg = "The serial port closed. Choose serial to reopen it."; renderSources(); }
+  })();
+  statusMsg = "reading USB serial";
+  stop = async () => {
+    closed = true;
+    try { await reader?.cancel(); } catch {}
+    await loop.catch(() => {});
+    try { await port.close(); } catch {}
+  };
+  return stop;
+}
+
+let switching = Promise.resolve();
+function setSource(name) {
+  switching = switching.then(async () => {
+    if (stopSource) { const s = stopSource; stopSource = null; try { await s(); } catch {} }
+    capture = null;
+    source = name; resetData(); conn = "connecting"; statusMsg = ""; renderSources(); renderCal();
+    try {
+      stopSource = await (name === "demo" ? startDemo() : name === "bluetooth" ? startBle() : startSerial());
+      conn = "live";
+    } catch (e) {
+      conn = "idle";
+      if (e.friendly) statusMsg = e.message;
+      else if (e.name === "NotFoundError") statusMsg = name === "serial" ? "No port chosen." : "No device chosen.";
+      else if (e.name === "SecurityError") statusMsg = "This page can't use " + name + " here. Open the local copy in Chrome.";
+      else statusMsg = e.message || String(e);
+    }
+    renderSources();
+  });
+}
+
+function renderSources() {
+  document.querySelectorAll("[data-source]").forEach(b => {
+    b.setAttribute("aria-pressed", String(b.dataset.source === source));
+    b.dataset.conn = b.dataset.source === source ? conn : "";
+  });
+  status.textContent = statusMsg;
+}
+
+/* ---------- views ---------- */
+const VIEWS = ["compass", "trail", "steps", "calibrate"];
+let view = "compass";
+const $ = id => document.getElementById(id);
+const status = $("status");
+
+function setView(v) {
+  if (!VIEWS.includes(v)) v = "compass";
+  view = v;
+  VIEWS.forEach(n => { $("view-" + n).hidden = n !== v; });
+  document.querySelectorAll("[data-view]").forEach(a => {
+    if (a.dataset.view === v) a.setAttribute("aria-current", "page"); else a.removeAttribute("aria-current");
+  });
+  $("viewTitle").textContent = v;
+  store.set("view", v);
+}
+window.addEventListener("hashchange", () => setView(location.hash.slice(1)));
+document.addEventListener("keydown", e => {
+  if (e.ctrlKey || e.metaKey || e.altKey) return;
+  const i = "1234".indexOf(e.key);
+  if (i >= 0) { history.replaceState(null, "", "#" + VIEWS[i]); setView(VIEWS[i]); }
+});
+
+/* ---------- drawing ---------- */
+const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)");
+const ease = (dt, k) => (reduceMotion.matches ? 1 : 1 - Math.exp(-dt * k));
+let col = {};
+function readTokens() {
+  const cs = getComputedStyle(document.documentElement);
+  const g = n => cs.getPropertyValue(n).trim();
+  col = { bg: g("--bg"), fg: g("--fg"), muted: g("--muted"), line: g("--line"), faint: g("--faint"), font: g("--mono") };
+}
+matchMedia("(prefers-color-scheme: dark)").addEventListener("change", readTokens);
+new MutationObserver(readTokens).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+
+function fit(cv) {
+  const dpr = window.devicePixelRatio || 1;
+  const w = cv.clientWidth, h = cv.clientHeight;
+  const W = Math.round(w * dpr), H = Math.round(h * dpr);
+  if (cv.width !== W || cv.height !== H) { cv.width = W; cv.height = H; }
+  const c = cv.getContext("2d");
+  c.setTransform(dpr, 0, 0, dpr, 0, 0);
+  c.clearRect(0, 0, w, h);
+  return w < 60 || h < 60 ? [null, w, h] : [c, w, h];
+}
+const font = (px, w = "") => `${w} ${px}px ${col.font}`;
+const WINDS = ["n", "nne", "ne", "ene", "e", "ese", "se", "sse", "s", "ssw", "sw", "wsw", "w", "wnw", "nw", "nnw"];
+const wind = h => WINDS[Math.round(h / 22.5) % 16];
+
+/* compass */
+let disp = null;
+const cvCompass = $("cv-compass");
+function drawCompass(dt) {
+  const [c, w, h] = fit(cvCompass);
+  if (!c) return;
+  const target = headingOut();
+  if (target != null) {
+    if (disp == null) disp = target;
+    const d = ((target - disp + 540) % 360) - 180;
+    disp = (disp + d * ease(dt, 7) + 360) % 360;
+  }
+  const held = heldOut();
+  const cx = w / 2, cy = h / 2, R = Math.min(w, h) / 2 - 16;
+  const rot = disp == null ? 0 : disp;
+
+  c.lineWidth = 1;
+  c.strokeStyle = col.line;
+  c.beginPath(); c.arc(cx, cy, R, 0, Math.PI * 2); c.stroke();
+  c.strokeStyle = col.faint;
+  c.beginPath(); c.arc(cx, cy, R * 0.56, 0, Math.PI * 2); c.stroke();
+
+  c.lineCap = "round";
+  for (let a = 0; a < 360; a += 5) {
+    const card = a % 90 === 0, major = a % 30 === 0;
+    const len = card ? 13 : major ? 8 : 4;
+    const ang = (a - rot - 90) * Math.PI / 180;
+    const co = Math.cos(ang), si = Math.sin(ang);
+    c.strokeStyle = card ? col.fg : major ? col.muted : col.line;
+    c.lineWidth = card ? 1.5 : 1;
+    c.beginPath(); c.moveTo(cx + co * (R - len), cy + si * (R - len)); c.lineTo(cx + co * R, cy + si * R); c.stroke();
+    if (major) {
+      const lr = R - 28;
+      c.textAlign = "center"; c.textBaseline = "middle";
+      if (card) { c.fillStyle = col.fg; c.font = font(13, a === 0 ? "bold" : ""); c.fillText("NESW"[a / 90], cx + co * lr, cy + si * lr); }
+      else { c.fillStyle = col.muted; c.font = font(10); c.fillText(String(a), cx + co * lr, cy + si * lr); }
+    }
+  }
+
+  /* fixed lubber mark: the dial turns under it */
+  c.fillStyle = col.fg;
+  c.beginPath(); c.moveTo(cx - 5, cy - R - 11); c.lineTo(cx + 5, cy - R - 11); c.lineTo(cx, cy - R - 3); c.closePath(); c.fill();
+
+  c.textAlign = "center"; c.textBaseline = "alphabetic";
+  c.fillStyle = held ? col.muted : col.fg;
+  c.font = font(Math.round(R * 0.27));
+  c.fillText(disp == null ? "–" : `${Math.round(disp) % 360}°`, cx, cy + R * 0.08);
+  c.font = font(13);
+  c.fillStyle = col.muted;
+  c.fillText(disp == null ? "waiting for data" : held ? "held" : wind(disp), cx, cy + R * 0.08 + 26);
+}
+
+/* trail */
+const cvTrail = $("cv-trail");
+const TV = { cx: 0, cy: 0, s: 40, init: false };
+let trailHover = null;
+function drawTrail(dt) {
+  const [c, w, h] = fit(cvTrail);
+  if (!c) return;
+  const pts = S.trail;
+  let minX = 0, maxX = 0, minY = 0, maxY = 0;
+  for (const p of pts) { if (p.x < minX) minX = p.x; if (p.x > maxX) maxX = p.x; if (p.y < minY) minY = p.y; if (p.y > maxY) maxY = p.y; }
+  const pad = 1.6;
+  minX -= pad; maxX += pad; minY -= pad; maxY += pad;
+  const s = Math.min(70, w / (maxX - minX), h / (maxY - minY));
+  const tcx = (minX + maxX) / 2, tcy = (minY + maxY) / 2;
+  if (!TV.init) { TV.s = s; TV.cx = tcx; TV.cy = tcy; TV.init = true; }
+  const k = ease(dt, 3.5);
+  TV.s += (s - TV.s) * k; TV.cx += (tcx - TV.cx) * k; TV.cy += (tcy - TV.cy) * k;
+  const X = x => w / 2 + (x - TV.cx) * TV.s, Y = y => h / 2 - (y - TV.cy) * TV.s;
+
+  const step = TV.s < 14 ? 5 : 1;
+  c.lineWidth = 1; c.strokeStyle = col.faint;
+  c.beginPath();
+  const x0 = Math.floor((TV.cx - w / 2 / TV.s) / step) * step, x1 = TV.cx + w / 2 / TV.s;
+  for (let x = x0; x <= x1; x += step) { const px = Math.round(X(x)) + 0.5; c.moveTo(px, 0); c.lineTo(px, h); }
+  const y0 = Math.floor((TV.cy - h / 2 / TV.s) / step) * step, y1 = TV.cy + h / 2 / TV.s;
+  for (let y = y0; y <= y1; y += step) { const py = Math.round(Y(y)) + 0.5; c.moveTo(0, py); c.lineTo(w, py); }
+  c.stroke();
+
+  c.lineJoin = "round"; c.lineCap = "round";
+  for (let i = 1; i < pts.length; i++) {
+    const a = pts[i - 1], b = pts[i];
+    c.lineWidth = 2;
+    c.strokeStyle = b.held ? col.muted : col.fg;
+    c.setLineDash(b.held ? [3, 4] : []);
+    c.beginPath(); c.moveTo(X(a.x), Y(a.y)); c.lineTo(X(b.x), Y(b.y)); c.stroke();
+  }
+  c.setLineDash([]);
+
+  c.lineWidth = 1.5; c.strokeStyle = col.fg; c.fillStyle = col.bg;
+  c.beginPath(); c.arc(X(0), Y(0), 4.5, 0, Math.PI * 2); c.fill(); c.stroke();
+
+  const cur = pts[pts.length - 1];
+  const hh = headingOut();
+  const px = X(cur.x), py = Y(cur.y);
+  const age = performance.now() - S.ripple;
+  if (age < 500 && !reduceMotion.matches) {
+    c.strokeStyle = col.muted; c.globalAlpha = 1 - age / 500; c.lineWidth = 1;
+    c.beginPath(); c.arc(px, py, 5 + age / 500 * 14, 0, Math.PI * 2); c.stroke();
+    c.globalAlpha = 1;
+  }
+  if (hh != null) {
+    const r = hh * Math.PI / 180;
+    c.strokeStyle = heldOut() ? col.muted : col.fg; c.lineWidth = 2;
+    c.beginPath(); c.moveTo(px, py); c.lineTo(px + Math.sin(r) * 16, py - Math.cos(r) * 16); c.stroke();
+  }
+  c.fillStyle = col.fg; c.strokeStyle = col.bg; c.lineWidth = 2;
+  c.beginPath(); c.arc(px, py, 4.5, 0, Math.PI * 2); c.stroke(); c.fill();
+
+  c.font = font(11); c.fillStyle = col.muted; c.textBaseline = "alphabetic";
+  const bar = step * TV.s;
+  c.strokeStyle = col.muted; c.lineWidth = 1;
+  c.beginPath(); c.moveTo(10, h - 12); c.lineTo(10 + bar, h - 12); c.moveTo(10.5, h - 16); c.lineTo(10.5, h - 8); c.moveTo(10 + bar - 0.5, h - 16); c.lineTo(10 + bar - 0.5, h - 8); c.stroke();
+  c.textAlign = "left"; c.fillText(`${step} m`, 16 + bar, h - 8);
+  c.textAlign = "right"; c.fillText("N ↑", w - 10, 18);
+
+  if (pts.length < 2) {
+    c.textAlign = "center"; c.font = font(13);
+    c.fillText(conn === "live" ? "start walking to draw a trail" : "connect a source to draw a trail", w / 2, h / 2 - 24);
+  }
+
+  if (trailHover) {
+    let best = null, bd = 14 * 14;
+    for (const p of pts) { const d = (X(p.x) - trailHover.x) ** 2 + (Y(p.y) - trailHover.y) ** 2; if (d < bd) { bd = d; best = p; } }
+    if (best && best.n > 0) {
+      const bx = X(best.x), by = Y(best.y);
+      c.strokeStyle = col.fg; c.lineWidth = 1;
+      c.beginPath(); c.arc(bx, by, 7, 0, Math.PI * 2); c.stroke();
+      tip(c, w, bx, by, `step ${best.n} · ${Math.round(best.h)}°${best.held ? " held" : ""}`);
+    }
+  }
+}
+cvTrail.addEventListener("pointermove", e => { const r = cvTrail.getBoundingClientRect(); trailHover = { x: e.clientX - r.left, y: e.clientY - r.top }; });
+cvTrail.addEventListener("pointerleave", () => { trailHover = null; });
+
+function tip(c, w, x, y, text) {
+  c.font = font(11);
+  const tw = c.measureText(text).width + 14;
+  let tx = x + 12, ty = y - 30;
+  if (tx + tw > w - 4) tx = x - 12 - tw;
+  if (ty < 4) ty = y + 12;
+  c.fillStyle = col.bg; c.strokeStyle = col.line; c.lineWidth = 1;
+  c.beginPath(); c.rect(Math.round(tx) + 0.5, Math.round(ty) + 0.5, Math.round(tw), 20); c.fill(); c.stroke();
+  c.fillStyle = col.fg; c.textAlign = "left"; c.textBaseline = "middle";
+  c.fillText(text, tx + 7, ty + 11);
+  c.textBaseline = "alphabetic";
+}
+
+/* step scope */
+const cvScope = $("cv-scope");
+const WIN = 8000;
+let yr = 0.5, scopeHover = null, dragThr = false;
+const SC = { L: 40, R: 10, T: 12, B: 24 };
+function scopeGeom(w, h) {
+  const tEnd = S.tNow ?? 0, t0 = tEnd - WIN;
+  return {
+    t0,
+    X: t => SC.L + (t - t0) / WIN * (w - SC.L - SC.R),
+    Y: v => SC.T + (yr - v) / (2 * yr) * (h - SC.T - SC.B),
+    V: py => yr - (py - SC.T) / (h - SC.T - SC.B) * 2 * yr,
+    T: px => t0 + (px - SC.L) / (w - SC.L - SC.R) * WIN,
+  };
+}
+function drawScope(dt) {
+  const [c, w, h] = fit(cvScope);
+  if (!c) return;
+  let m = Math.max(0.4, settings.stepThr * 1.4);
+  const tEnd = S.tNow ?? 0;
+  for (const p of S.sig) if (p.t >= tEnd - WIN) m = Math.max(m, Math.abs(p.v) * 1.25);
+  yr += (m - yr) * ease(dt, 3);
+  const G = scopeGeom(w, h);
+
+  const tick = yr > 1.2 ? 0.5 : yr > 0.6 ? 0.25 : 0.1;
+  c.font = font(10); c.textAlign = "right"; c.textBaseline = "middle"; c.lineWidth = 1;
+  for (let v = -Math.floor(yr / tick) * tick; v <= yr + 1e-9; v += tick) {
+    const py = Math.round(G.Y(v)) + 0.5;
+    c.strokeStyle = Math.abs(v) < 1e-9 ? col.line : col.faint;
+    c.beginPath(); c.moveTo(SC.L, py); c.lineTo(w - SC.R, py); c.stroke();
+    c.fillStyle = col.muted;
+    c.fillText(`${(+v.toFixed(2)).toString()}${Math.abs(v) < 1e-9 ? " g" : ""}`, SC.L - 6, py);
+  }
+  c.textBaseline = "alphabetic";
+  c.textAlign = "left"; c.fillText("−8 s", SC.L, h - 6);
+  c.textAlign = "center"; c.fillText("−4 s", (SC.L + w - SC.R) / 2, h - 6);
+  c.textAlign = "right"; c.fillText("now", w - SC.R, h - 6);
+
+  const ty = G.Y(settings.stepThr);
+  const hot = dragThr || (scopeHover && Math.abs(scopeHover.y - ty) < 8);
+  c.strokeStyle = hot ? col.fg : col.muted; c.setLineDash([4, 4]);
+  c.beginPath(); c.moveTo(SC.L, Math.round(ty) + 0.5); c.lineTo(w - SC.R, Math.round(ty) + 0.5); c.stroke();
+  c.setLineDash([]);
+  if (hot) { c.fillStyle = col.fg; c.textAlign = "right"; c.font = font(10); c.fillText(`${settings.stepThr.toFixed(2)} g`, w - SC.R, ty - 6); }
+
+  c.save();
+  c.beginPath(); c.rect(SC.L, 0, w - SC.L - SC.R, h); c.clip();
+  c.strokeStyle = col.fg; c.lineWidth = 1.5; c.lineJoin = "round";
+  c.beginPath();
+  let started = false;
+  for (const p of S.sig) {
+    if (p.t < G.t0 - 100) continue;
+    const x = G.X(p.t), y = G.Y(p.v);
+    if (!started) { c.moveTo(x, y); started = true; } else c.lineTo(x, y);
+  }
+  c.stroke();
+  const now = performance.now();
+  for (const mk of S.marks) {
+    if (mk.t < G.t0) continue;
+    const age = now - mk.born;
+    const r = 3.5 + (reduceMotion.matches ? 0 : 4 * Math.exp(-age / 110));
+    const x = G.X(mk.t), y = G.Y(mk.v);
+    c.fillStyle = col.bg; c.beginPath(); c.arc(x, y, r + 2, 0, Math.PI * 2); c.fill();
+    c.fillStyle = col.fg; c.beginPath(); c.arc(x, y, r, 0, Math.PI * 2); c.fill();
+  }
+  c.restore();
+
+  if (!S.sig.length) {
+    c.fillStyle = col.muted; c.textAlign = "center"; c.font = font(13);
+    c.fillText(conn === "live" ? "waiting for accelerometer data" : "connect a source to see the trace", (SC.L + w) / 2, h / 2 - 20);
+  }
+
+  if (scopeHover && !dragThr && !hot && S.sig.length && scopeHover.x >= SC.L) {
+    const t = G.T(scopeHover.x);
+    let best = null, bd = Infinity;
+    for (const p of S.sig) { const d = Math.abs(p.t - t); if (d < bd) { bd = d; best = p; } }
+    if (best && best.t >= G.t0) {
+      const x = G.X(best.t), y = G.Y(best.v);
+      c.strokeStyle = col.line; c.lineWidth = 1;
+      c.beginPath(); c.moveTo(Math.round(x) + 0.5, SC.T); c.lineTo(Math.round(x) + 0.5, h - SC.B); c.stroke();
+      c.fillStyle = col.fg; c.beginPath(); c.arc(x, y, 3, 0, Math.PI * 2); c.fill();
+      tip(c, w, x, y, `${best.v.toFixed(3)} g · ${((best.t - tEnd) / 1000).toFixed(1)} s`);
+    }
+  }
+}
+function scopePos(e) { const r = cvScope.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top, w: r.width, h: r.height }; }
+cvScope.addEventListener("pointerdown", e => {
+  const p = scopePos(e), G = scopeGeom(p.w, p.h);
+  if (Math.abs(p.y - G.Y(settings.stepThr)) < 10) { dragThr = true; cvScope.setPointerCapture(e.pointerId); }
+});
+cvScope.addEventListener("pointermove", e => {
+  const p = scopePos(e);
+  scopeHover = p;
+  const G = scopeGeom(p.w, p.h);
+  if (dragThr) setSetting("stepThr", Math.round(G.V(p.y) * 100) / 100, false);
+  cvScope.style.cursor = dragThr || Math.abs(p.y - G.Y(settings.stepThr)) < 10 ? "ns-resize" : "crosshair";
+});
+const endDrag = () => { if (dragThr) { dragThr = false; store.set("settings", settings); } };
+cvScope.addEventListener("pointerup", endDrag);
+cvScope.addEventListener("pointercancel", endDrag);
+cvScope.addEventListener("pointerleave", () => { if (!dragThr) scopeHover = null; });
+
+/* calibration */
+const cvCal = $("cv-cal");
+let calR = 400;
+function captureStats() {
+  const pts = capture.pts;
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+  for (const [x, y] of pts) { if (x < minX) minX = x; if (x > maxX) maxX = x; if (y < minY) minY = y; if (y > maxY) maxY = y; }
+  const cx = (minX + maxX) / 2, cy = (minY + maxY) / 2;
+  const bins = new Array(36).fill(false);
+  for (const [x, y] of pts) bins[Math.floor((Math.atan2(y - cy, x - cx) + Math.PI) / (2 * Math.PI) * 36) % 36] = true;
+  return { minX, maxX, minY, maxY, cx, cy, bins, coverage: bins.filter(Boolean).length / 36, n: pts.length };
+}
+function drawCal(dt) {
+  const [c, w, h] = fit(cvCal);
+  if (!c) return;
+  const cc = cal();
+  const pts = capture ? capture.pts : S.raw;
+  let m = 300;
+  for (const [x, y] of pts) m = Math.max(m, Math.abs(x) * 1.15, Math.abs(y) * 1.15, Math.abs(x - cc.offX) * 1.15, Math.abs((y - cc.offY) * cc.scaleY) * 1.15);
+  calR += (m - calR) * ease(dt, 3);
+  const cx = w / 2, cy = h / 2, sc = (Math.min(w, h) / 2 - 22) / calR;
+  const X = x => cx + x * sc, Y = y => cy - y * sc;
+
+  c.lineWidth = 1;
+  c.strokeStyle = col.faint;
+  const ring = calR > 900 ? 500 : calR > 450 ? 200 : 100;
+  for (let r = ring; r < calR; r += ring) { c.beginPath(); c.arc(cx, cy, r * sc, 0, Math.PI * 2); c.stroke(); }
+  c.strokeStyle = col.line;
+  c.beginPath(); c.moveTo(cx - calR * sc, cy + 0.5); c.lineTo(cx + calR * sc, cy + 0.5); c.moveTo(cx + 0.5, cy - calR * sc); c.lineTo(cx + 0.5, cy + calR * sc); c.stroke();
+  c.fillStyle = col.muted; c.font = font(10);
+  c.textAlign = "right"; c.textBaseline = "alphabetic"; c.fillText("mx", cx + calR * sc, cy - 6);
+  c.textAlign = "left"; c.fillText("my", cx + 6, cy - calR * sc + 10);
+  c.fillText(`${ring} mG`, X(ring) + 4, cy + 14);
+
+  c.fillStyle = col.muted; c.globalAlpha = 0.55;
+  for (const [x, y] of pts) c.fillRect(X(x) - 1, Y(y) - 1, 2, 2);
+  c.globalAlpha = 1;
+  if (!capture) {
+    c.fillStyle = col.fg;
+    for (const [x, y] of pts) c.fillRect(X(x - cc.offX) - 1, Y((y - cc.offY) * cc.scaleY) - 1, 2, 2);
+  }
+
+  if (capture && capture.pts.length > 5) {
+    const st = captureStats();
+    c.strokeStyle = col.fg; c.lineWidth = 1.5;
+    const ex = X(st.cx), ey = Y(st.cy);
+    c.beginPath(); c.moveTo(ex - 6, ey); c.lineTo(ex + 6, ey); c.moveTo(ex, ey - 6); c.lineTo(ex, ey + 6); c.stroke();
+    const R = calR * sc + 10;
+    for (let i = 0; i < 36; i++) {
+      /* bin i spans atan2 angles; canvas y is flipped */
+      const a0 = -(i / 36 * 2 * Math.PI - Math.PI), a1 = -((i + 1) / 36 * 2 * Math.PI - Math.PI);
+      c.strokeStyle = st.bins[i] ? col.fg : col.faint; c.lineWidth = 3; c.lineCap = "butt";
+      c.beginPath(); c.arc(cx, cy, R, a1 + 0.02, a0 - 0.02); c.stroke();
+    }
+  }
+
+  if (!pts.length) {
+    c.fillStyle = col.muted; c.textAlign = "center"; c.font = font(13);
+    c.fillText(conn === "live" ? "waiting for magnetometer data" : "connect a source first", cx, cy - 24);
+  }
+}
+
+function renderCal() {
+  const cc = cal();
+  const capturing = !!capture;
+  $("capStart").hidden = capturing;
+  $("capApply").hidden = !capturing;
+  $("capCancel").hidden = !capturing;
+  $("capReset").hidden = capturing;
+  $("r-offx").textContent = `${Math.round(cc.offX)} mG`;
+  $("r-offy").textContent = `${Math.round(cc.offY)} mG`;
+  $("r-scy").textContent = cc.scaleY.toFixed(3);
+  $("r-base2").textContent = cc.baseline ? `${cc.baseline} mG` : "not set";
+  $("snippet").textContent =
+`/* mag calibration from SensorTile Live */
+#define MAG_OFFSET_X   ${String(Math.round(cc.offX)).padStart(5)}    /* mG */
+#define MAG_OFFSET_Y   ${String(Math.round(cc.offY)).padStart(5)}    /* mG */
+#define MAG_SCALE_Y    ${cc.scaleY.toFixed(3)}f
+#define MAG_BASELINE   ${String(cc.baseline ?? 0).padStart(5)}    /* mG, clean |B| */
+#define MAG_HOLD_PCT   ${String(settings.holdPct).padStart(5)}`;
+}
+$("capStart").addEventListener("click", () => { capture = { pts: [] }; renderCal(); });
+$("capCancel").addEventListener("click", () => { capture = null; renderCal(); });
+$("capApply").addEventListener("click", () => {
+  const st = captureStats();
+  const rx = (st.maxX - st.minX) / 2, ry = (st.maxY - st.minY) / 2;
+  const offX = st.cx, offY = st.cy, scaleY = ry > 0 ? rx / ry : 1;
+  let sum = 0;
+  for (const [x, y, z] of capture.pts) sum += Math.hypot(x - offX, (y - offY) * scaleY, z);
+  cals[calKey()] = { offX: Math.round(offX), offY: Math.round(offY), scaleY: +scaleY.toFixed(3), baseline: Math.round(sum / capture.pts.length) };
+  store.set("cals", cals);
+  capture = null; S.hx = S.hy = S.B = null; S.held = false;
+  renderCal();
+});
+$("capReset").addEventListener("click", () => {
+  cals[calKey()] = calKey() === "demo" ? { ...DEMO_CAL } : { ...NO_CAL };
+  store.set("cals", cals); S.hx = S.hy = S.B = null; S.held = false;
+  renderCal();
+});
+$("copySnippet").addEventListener("click", () => {
+  const btn = $("copySnippet"), text = $("snippet").textContent;
+  const done = msg => { btn.textContent = msg; setTimeout(() => { btn.textContent = "[copy]"; }, 1400); };
+  const select = () => { const r = document.createRange(); r.selectNodeContents($("snippet")); const s = getSelection(); s.removeAllRanges(); s.addRange(r); done("[selected, press ctrl+c]"); };
+  try { navigator.clipboard.writeText(text).then(() => done("[copied]"), select); } catch { select(); }
+});
+$("clearTrail").addEventListener("click", () => { S.trail = [{ x: 0, y: 0, h: 0, held: false, n: 0 }]; S.dist = 0; TV.init = false; });
+
+/* settings steppers */
+function setSetting(key, v, save = true) {
+  const def = STEPS[key];
+  v = Math.min(def.max, Math.max(def.min, v));
+  settings[key] = +v.toFixed(3);
+  $("s-" + key).textContent = def.fmt(settings[key]);
+  if (save) store.set("settings", settings);
+  if (key === "holdPct") renderCal();
+}
+document.querySelectorAll("[data-step]").forEach(b => b.addEventListener("click", () => {
+  const key = b.dataset.step;
+  setSetting(key, settings[key] + STEPS[key].d * Number(b.dataset.d));
+}));
+Object.keys(STEPS).forEach(k => setSetting(k, settings[k], false));
+document.querySelectorAll("[data-source]").forEach(b => b.addEventListener("click", () => setSource(b.dataset.source)));
+
+/* ---------- readouts ---------- */
+const sign = v => (v > 0 ? "+" : v < 0 ? "−" : "");
+function renderReadouts() {
+  const hz = sampleTimes.length;
+  $("meta").textContent = !source ? "not connected" : conn === "live" ? `${source} · ${hz} Hz` : conn === "connecting" ? `${source} · connecting` : "not connected";
+
+  const cc = cal(), hh = headingOut(), held = heldOut();
+  $("r-heading").textContent = hh == null ? "–" : `${hh.toFixed(1)}° ${wind(hh)}${held ? " · held" : ""}`;
+  $("r-field").textContent = S.B == null ? "–" : `${Math.round(S.B)} mG`;
+  $("r-baseline").textContent = cc.baseline ? `${cc.baseline} mG` : "not set";
+  const thr = settings.holdPct / 100;
+  $("r-dev").textContent = !cc.baseline || S.B == null ? "–" : `${sign(S.dev)}${Math.abs(S.dev * 100).toFixed(1)}% of ±${settings.holdPct}%`;
+  $("r-from").textContent = S.deviceHeading != null ? "the device" : S.localOut != null ? "this page" : "–";
+  const mark = $("devMark");
+  mark.style.left = `${Math.min(100, Math.max(0, 50 + (S.dev / (2 * thr)) * 50))}%`;
+  mark.classList.toggle("held", held);
+
+  const last = S.trail[S.trail.length - 1];
+  $("r-tsteps").textContent = String(last.n);
+  $("r-dist").textContent = `${S.dist.toFixed(1)} m`;
+  $("r-disp").textContent = `${Math.hypot(last.x, last.y).toFixed(1)} m`;
+
+  $("r-lsteps").textContent = String(S.localSteps);
+  $("r-dsteps").textContent = S.deviceSteps == null ? "–" : String(Math.round(S.deviceSteps));
+  /* cadence from the last few gaps only, so a pause at a corner doesn't drag it down */
+  const st = S.stepTimes, gaps = [];
+  for (let i = st.length - 1; i > 0 && gaps.length < 4; i--) { const g = st[i] - st[i - 1]; if (g > 1500) break; gaps.push(g); }
+  const live = gaps.length >= 2 && S.tNow - st[st.length - 1] < 1500;
+  $("r-cad").textContent = live ? `${Math.round(60000 * gaps.length / gaps.reduce((a, b) => a + b, 0))} steps/min` : "–";
+
+  if (capture) {
+    const s = capture.pts.length > 5 ? captureStats() : null;
+    $("r-cov").textContent = s ? `${Math.round(s.coverage * 100)}%` : "0%";
+    $("capApply").disabled = !s || s.coverage < 0.8;
+    $("capApply").title = $("capApply").disabled ? "Turn a full circle first" : "";
+  } else $("r-cov").textContent = "–";
+}
+
+/* ---------- loop ---------- */
+let lastFrame = performance.now(), lastUi = 0;
+function frame(now) {
+  requestAnimationFrame(frame);
+  const dt = Math.min(0.1, (now - lastFrame) / 1000);
+  lastFrame = now;
+  if (view === "compass") drawCompass(dt);
+  else if (view === "trail") drawTrail(dt);
+  else if (view === "steps") drawScope(dt);
+  else drawCal(dt);
+  if (view !== "compass") { const t = headingOut(); if (t != null) disp = t; }
+  if (now - lastUi > 120) { lastUi = now; renderReadouts(); }
+}
+
+readTokens();
+resetData();
+setView(location.hash.slice(1) || store.get("view", "compass"));
+renderCal();
+setSource("demo");
+requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>

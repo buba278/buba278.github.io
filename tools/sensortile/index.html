@@ -100,6 +100,31 @@ pre {
 }
 .meter .mark.held { background: var(--bg); }
 
+.modes { display: flex; gap: 1.6em; margin-bottom: 1.6em; color: var(--muted); }
+.modes .link[aria-pressed="true"] { color: var(--fg); text-decoration: underline; text-underline-offset: 3px; }
+.tri { aspect-ratio: 3 / 1; }
+.poses { list-style: none; display: grid; gap: .6em; margin-top: 1.6em; max-width: 400px; }
+.poses li { display: grid; grid-template-columns: 1em 5.5em 1fr 3.4em; align-items: center; gap: 10px; color: var(--muted); }
+.poses li.now { color: var(--fg); }
+.poses .pm { position: relative; height: 1px; background: var(--line); }
+.poses .pm i { position: absolute; left: 0; top: -1px; height: 3px; width: 0; background: var(--muted); transition: width .15s linear; }
+.poses li.now .pm i, .poses li.done .pm i { background: var(--fg); }
+.poses .pp { text-align: right; font-variant-numeric: tabular-nums; }
+.hint { color: var(--muted); margin-top: 1.2em; max-width: 52ch; min-height: 3.2em; }
+.howto { list-style: none; display: grid; gap: .4em; margin-top: .8em; max-width: 52ch; color: var(--muted); }
+.rec-input {
+  font: inherit; color: var(--fg); background: transparent; border: 0; border-bottom: 1px dashed var(--line);
+  width: 11em; padding: 0 0 1px; text-align: right; border-radius: 0;
+}
+.rec-input::placeholder { color: var(--muted); opacity: .7; }
+.rec-input:focus-visible { outline: 0; border-bottom: 1px solid var(--fg); }
+.labels { display: flex; flex-wrap: wrap; gap: .4em 1.2em; margin-top: 1.2em; max-width: 400px; }
+.labels .link { color: var(--muted); }
+.labels .link:hover { color: var(--fg); }
+.recdot { display: inline-block; width: 6px; height: 6px; margin-right: 7px; border-radius: 50%; background: var(--fg); vertical-align: 1px; animation: blink 1.2s ease-in-out infinite; }
+@keyframes blink { 50% { opacity: .25; } }
+.note { color: var(--muted); margin-top: 1.2em; max-width: 52ch; }
+
 @media (max-width: 640px) {
   .container { flex-direction: column; gap: 1.6em; }
   .sidebar { width: auto; }
@@ -110,7 +135,7 @@ pre {
   .group { margin-top: 1.2em; }
   .status { min-height: 0; }
 }
-@media (prefers-reduced-motion: reduce) { .meter .mark { transition: none; } }
+@media (prefers-reduced-motion: reduce) { .meter .mark, .poses .pm i { transition: none; } .recdot { animation: none; } }
 </style>
 </head>
 <body>
@@ -124,6 +149,7 @@ pre {
         <li><a href="#trail" data-view="trail">trail <kbd>2</kbd></a></li>
         <li><a href="#steps" data-view="steps">steps <kbd>3</kbd></a></li>
         <li><a href="#calibrate" data-view="calibrate">calibrate <kbd>4</kbd></a></li>
+        <li><a href="#record" data-view="record">record <kbd>5</kbd></a></li>
       </ul>
     </nav>
     <div class="group">
@@ -138,7 +164,7 @@ pre {
   </aside>
 
   <main>
-    <div class="head"><span id="viewTitle">compass</span><span class="meta" id="meta"></span></div>
+    <div class="head"><span id="viewTitle">compass</span><span class="meta" id="meta"><span id="recTag" hidden><i class="recdot"></i><span id="recTime"></span> · </span><span id="metaTxt"></span></span></div>
 
     <section class="view" id="view-compass">
       <p class="lede">Heading from the magnetometer. When the field strength drifts away from the baseline, it holds the last good value.</p>
@@ -178,16 +204,54 @@ pre {
     </section>
 
     <section class="view" id="view-calibrate" hidden>
-      <p class="lede">Hold the board flat away from metal and turn it through a full circle. The offsets centre the circle and the baseline records what a clean field looks like.</p>
-      <div class="stage"><canvas id="cv-cal" class="sq" aria-label="magnetometer x against y"></canvas></div>
-      <div class="legend"><span><i class="raw"></i>raw</span><span><i></i>calibrated</span></div>
-      <ul class="readout">
-        <li><span class="k">offset x</span><span class="v" id="r-offx">–</span></li>
-        <li><span class="k">offset y</span><span class="v" id="r-offy">–</span></li>
-        <li><span class="k">scale y</span><span class="v" id="r-scy">–</span></li>
-        <li><span class="k">baseline</span><span class="v" id="r-base2">–</span></li>
-        <li><span class="k">coverage</span><span class="v" id="r-cov">–</span></li>
-      </ul>
+      <div class="modes">
+        <button class="link" data-calmode="quick" aria-pressed="true">quick</button>
+        <button class="link" data-calmode="full" aria-pressed="false">full</button>
+      </div>
+      <p class="lede" id="calLede"></p>
+
+      <div id="cal-quick">
+        <div class="stage"><canvas id="cv-cal" class="sq" aria-label="magnetometer x against y"></canvas></div>
+        <div class="legend"><span><i class="raw"></i>raw</span><span><i></i>calibrated</span></div>
+        <ul class="readout">
+          <li><span class="k">offset x</span><span class="v" id="r-offx">–</span></li>
+          <li><span class="k">offset y</span><span class="v" id="r-offy">–</span></li>
+          <li><span class="k">scale y</span><span class="v" id="r-scy">–</span></li>
+          <li><span class="k">baseline</span><span class="v" id="r-base2">–</span></li>
+          <li><span class="k">coverage</span><span class="v" id="r-cov">–</span></li>
+        </ul>
+      </div>
+
+      <div id="cal-full" hidden>
+        <div class="stage"><canvas id="cv-tri" class="tri" aria-label="magnetometer readings seen from three sides"></canvas></div>
+        <div class="legend"><span><i class="raw"></i>raw</span><span><i></i>calibrated</span></div>
+        <ul class="poses" id="poses">
+          <li><span class="pa"></span><span class="pn">z up</span><span class="pm"><i></i></span><span class="pp">–</span></li>
+          <li><span class="pa"></span><span class="pn">z down</span><span class="pm"><i></i></span><span class="pp">–</span></li>
+          <li><span class="pa"></span><span class="pn">x up</span><span class="pm"><i></i></span><span class="pp">–</span></li>
+          <li><span class="pa"></span><span class="pn">x down</span><span class="pm"><i></i></span><span class="pp">–</span></li>
+          <li><span class="pa"></span><span class="pn">y up</span><span class="pm"><i></i></span><span class="pp">–</span></li>
+          <li><span class="pa"></span><span class="pn">y down</span><span class="pm"><i></i></span><span class="pp">–</span></li>
+        </ul>
+        <p class="hint" id="poseHint" aria-live="polite"></p>
+        <ul class="readout">
+          <li><span class="k">points</span><span class="v" id="r-fpts">–</span></li>
+          <li><span class="k">offset x · y · z</span><span class="v" id="r-foff">–</span></li>
+          <li><span class="k">scale y · z</span><span class="v" id="r-fsc">–</span></li>
+          <li><span class="k">baseline</span><span class="v" id="r-fbase">–</span></li>
+          <li><span class="k">field spread</span><span class="v" id="r-fspread">–</span></li>
+        </ul>
+        <p class="sub">how to</p>
+        <ul class="howto">
+          <li>Run it on battery with USB unplugged, phone and laptop well away from the board.</li>
+          <li>Stand away from steel, ideally where the board will be used.</li>
+          <li>In each position, turn the board slowly through one full circle, about 10 seconds.</li>
+          <li>The positions are z up, z down, and standing on each of its four edges. The page works out which one you are in from the accelerometer.</li>
+          <li>One position per axis is enough to apply. All six give a steadier result.</li>
+          <li>Field spread is how much the field strength varies over the capture. It should fall to a few percent once calibrated.</li>
+        </ul>
+      </div>
+
       <div class="actions">
         <button class="link" id="capStart">[start capture]</button>
         <button class="link" id="capApply" hidden>[apply]</button>
@@ -204,6 +268,36 @@ pre {
       <p class="sub">for the firmware</p>
       <pre id="snippet"></pre>
       <div class="actions"><button class="link" id="copySnippet">[copy]</button></div>
+    </section>
+
+    <section class="view" id="view-record" hidden>
+      <p class="lede">Save the raw readings to a CSV, so calibration and heading ideas can be tested on a laptop without reflashing. Set a label for each position, for example 0, 90 or tilt fwd.</p>
+      <ul class="readout">
+        <li><span class="k">state</span><span class="v" id="r-rstate">idle</span></li>
+        <li><span class="k">time</span><span class="v" id="r-rtime">0:00</span></li>
+        <li><span class="k">samples</span><span class="v" id="r-rn">0</span></li>
+        <li><span class="k">label</span><span class="v"><input class="rec-input" id="recLabel" type="text" maxlength="24" autocomplete="off" spellcheck="false" placeholder="none" aria-label="label for new samples"></span></li>
+      </ul>
+      <div class="labels" id="recLabels" role="group" aria-label="quick labels">
+        <button class="link" data-label="0">0</button>
+        <button class="link" data-label="90">90</button>
+        <button class="link" data-label="180">180</button>
+        <button class="link" data-label="270">270</button>
+        <button class="link" data-label="tilt fwd">tilt fwd</button>
+        <button class="link" data-label="tilt back">tilt back</button>
+        <button class="link" data-label="tilt left">tilt left</button>
+        <button class="link" data-label="tilt right">tilt right</button>
+        <button class="link" data-label="walk">walk</button>
+        <button class="link" data-label="still">still</button>
+      </div>
+      <pre id="recPreview" aria-label="latest rows"></pre>
+      <p class="note">Columns: t_ms, label, ax ay az in mg, mx my mz in mG, steps, heading. Steps and heading are what the device sent, blank when not available.</p>
+      <div class="actions">
+        <button class="link" id="recToggle">[start recording]</button>
+        <button class="link" id="recSave" hidden>[save csv]</button>
+        <button class="link" id="recCopy" hidden>[copy]</button>
+        <button class="link" id="recDiscard" hidden>[discard]</button>
+      </div>
     </section>
   </main>
 </div>
@@ -231,14 +325,23 @@ const STEPS = {
 };
 const settings = Object.assign({ holdPct: 15, stride: 0.70, decl: 0, stepThr: 0.15, stepGap: 300 }, store.get("settings", {}));
 
-const DEMO_H = 230, DEMO_Z = -520; /* roughly Auckland: ~230 mG horizontal, steep downward dip */
-const DEMO_CAL = { offX: 60, offY: -35, scaleY: +(1 / 0.93).toFixed(3), baseline: Math.round(Math.hypot(DEMO_H, DEMO_Z)) };
+const DEMO_H = 250, DEMO_Z = 459; /* roughly Auckland: ~250 mG horizontal, field pointing up at about 60 degrees */
+const DEMO_RAW = { ox: 60, oy: -35, oz: 40, sy: 0.93, sz: 1.05 }; /* what the fake sensor adds, so calibration has something to undo */
+const DEMO_CAL = {
+  offX: DEMO_RAW.ox, offY: DEMO_RAW.oy, offZ: DEMO_RAW.oz,
+  scaleY: +(1 / DEMO_RAW.sy).toFixed(3), scaleZ: +(1 / DEMO_RAW.sz).toFixed(3),
+  baseline: Math.round(Math.hypot(DEMO_H, DEMO_Z)),
+};
 const NO_CAL = { offX: 0, offY: 0, scaleY: 1, baseline: null };
-const cals = Object.assign({ demo: { ...DEMO_CAL }, device: { ...NO_CAL } }, store.get("cals", {}));
+const savedCals = store.get("cals", {});
+const cals = { demo: { ...DEMO_CAL }, device: { ...NO_CAL, ...(savedCals.device || {}) } };
+const persistCals = () => store.set("cals", { device: cals.device });
 
 /* ---------- live state ---------- */
 let source = null, conn = "idle", statusMsg = "", stopSource = null;
 let sampleTimes = [], lastAcc = null, capture = null;
+let calMode = store.get("calMode", "quick") === "full" ? "full" : "quick";
+let rec = null, recLabel = "";
 let S;
 
 function resetData() {
@@ -261,6 +364,7 @@ const heldOut = () => (S.deviceHeld != null ? S.deviceHeld : S.held);
 function onSample(s) {
   const now = performance.now();
   const t = s.t != null ? s.t : now;
+  if (rec && rec.on) recRow(s, now);
   sampleTimes.push(now);
   while (sampleTimes.length && now - sampleTimes[0] > 1000) sampleTimes.shift();
 
@@ -274,10 +378,10 @@ function onSample(s) {
 
 function processMag(s, t) {
   const c = cal();
-  const x = s.mx - c.offX, y = (s.my - c.offY) * c.scaleY, z = s.mz;
+  const x = s.mx - c.offX, y = (s.my - c.offY) * c.scaleY, z = (s.mz - (c.offZ || 0)) * (c.scaleZ || 1);
   S.raw.push([s.mx, s.my]);
   if (S.raw.length > 1500) S.raw.shift();
-  if (capture) capture.pts.push([s.mx, s.my, s.mz]);
+  if (capture) capAdd(s.mx, s.my, s.mz);
 
   /* low-pass the vector, not the angle, so 359 -> 0 doesn't average to 180 */
   S.hx = S.hx == null ? x : S.hx + 0.2 * (x - S.hx);
@@ -362,7 +466,7 @@ function startDemo() {
     const sdt = dt / 1000;
     if (capture) {
       wasCapturing = true;
-      h = (h + 55 * sdt) % 360;
+      if (capture.mode === "quick") h = (h + 55 * sdt) % 360;
       return false;
     }
     if (wasCapturing) { wasCapturing = false; mode = "turn"; target = legs[leg][0]; pause = 300; nextLeg = false; }
@@ -396,12 +500,39 @@ function startDemo() {
     const az = walking ? 1000 + 230 * Math.sin(phase) + 70 * Math.sin(2 * phase + 0.6) : 1000;
     return {
       t: simT,
-      ax: (walking ? 80 * Math.sin(phase / 2) : 0) + noise(25),
-      ay: (walking ? 50 * Math.cos(phase) : 0) + noise(25),
-      az: az + noise(25),
-      mx: Math.round(mx + 60 + noise(4)),
-      my: Math.round(my * 0.93 - 35 + noise(4)),
-      mz: Math.round(mz + noise(4)),
+      ax: Math.round((walking ? 80 * Math.sin(phase / 2) : 0) + noise(25)),
+      ay: Math.round((walking ? 50 * Math.cos(phase) : 0) + noise(25)),
+      az: Math.round(az + noise(25)),
+      mx: Math.round(mx + DEMO_RAW.ox + noise(4)),
+      my: Math.round(my * DEMO_RAW.sy + DEMO_RAW.oy + noise(4)),
+      mz: Math.round(mz * DEMO_RAW.sz + DEMO_RAW.oz + noise(4)),
+    };
+  }
+
+  /* full calibration: turns through each position in order, like a person would */
+  let simPose = 0, simPsi = 0, simHold = 0, simSeen = null;
+  const spinMs = 5000;
+  function fullSample() {
+    if (simSeen !== capture) { simSeen = capture; simPose = 0; simPsi = 0; simHold = 600; }
+    const P = POSES[simPose % POSES.length];
+    const k = P.k, p = (k + 1) % 3, q = (k + 2) % 3;
+    let moving = false;
+    if (simHold > 0) { simHold -= dt; moving = true; }
+    else {
+      simPsi += 2 * Math.PI * dt / spinMs;
+      if (simPsi >= 2 * Math.PI) { simPsi = 0; simPose++; simHold = 600; }
+    }
+    const b = [0, 0, 0], a = [0, 0, 0];
+    b[p] = DEMO_H * Math.cos(simPsi);
+    b[q] = P.s * DEMO_H * Math.sin(simPsi);
+    b[k] = P.s * DEMO_Z;
+    a[k] = P.s * (moving ? 1250 : 1000);
+    return {
+      t: simT,
+      ax: Math.round(a[0] + noise(25)), ay: Math.round(a[1] + noise(25)), az: Math.round(a[2] + noise(25)),
+      mx: Math.round(b[0] + DEMO_RAW.ox + noise(4)),
+      my: Math.round(b[1] * DEMO_RAW.sy + DEMO_RAW.oy + noise(4)),
+      mz: Math.round(b[2] * DEMO_RAW.sz + DEMO_RAW.oz + noise(4)),
     };
   }
 
@@ -410,7 +541,7 @@ function startDemo() {
     const n = Math.min(10, Math.floor((now - last) / dt));
     if (n <= 0) return;
     last = n === 10 ? now : last + n * dt;
-    for (let i = 0; i < n; i++) { simT += dt; onSample(sample(tick())); }
+    for (let i = 0; i < n; i++) { simT += dt; onSample(capture && capture.mode === "full" ? fullSample() : sample(tick())); }
   }, dt);
   statusMsg = "simulated walk";
   return async () => clearInterval(id);
@@ -527,7 +658,7 @@ function renderSources() {
 }
 
 /* ---------- views ---------- */
-const VIEWS = ["compass", "trail", "steps", "calibrate"];
+const VIEWS = ["compass", "trail", "steps", "calibrate", "record"];
 let view = "compass";
 const $ = id => document.getElementById(id);
 const status = $("status");
@@ -541,11 +672,14 @@ function setView(v) {
   });
   $("viewTitle").textContent = v;
   store.set("view", v);
+  if (v === "record") renderRec();
 }
 window.addEventListener("hashchange", () => setView(location.hash.slice(1)));
 document.addEventListener("keydown", e => {
   if (e.ctrlKey || e.metaKey || e.altKey) return;
-  const i = "1234".indexOf(e.key);
+  if (e.target instanceof Element && e.target.closest("input, textarea")) return;
+  if (e.key === "r") { if (!rec || rec.on) recToggle(); return; }
+  const i = "12345".indexOf(e.key);
   if (i >= 0) { history.replaceState(null, "", "#" + VIEWS[i]); setView(VIEWS[i]); }
 });
 
@@ -842,7 +976,8 @@ function drawCal(dt) {
   const [c, w, h] = fit(cvCal);
   if (!c) return;
   const cc = cal();
-  const pts = capture ? capture.pts : S.raw;
+  const q = capture && capture.mode === "quick";
+  const pts = q ? capture.pts : S.raw;
   let m = 300;
   for (const [x, y] of pts) m = Math.max(m, Math.abs(x) * 1.15, Math.abs(y) * 1.15, Math.abs(x - cc.offX) * 1.15, Math.abs((y - cc.offY) * cc.scaleY) * 1.15);
   calR += (m - calR) * ease(dt, 3);
@@ -863,12 +998,12 @@ function drawCal(dt) {
   c.fillStyle = col.muted; c.globalAlpha = 0.55;
   for (const [x, y] of pts) c.fillRect(X(x) - 1, Y(y) - 1, 2, 2);
   c.globalAlpha = 1;
-  if (!capture) {
+  if (!q) {
     c.fillStyle = col.fg;
     for (const [x, y] of pts) c.fillRect(X(x - cc.offX) - 1, Y((y - cc.offY) * cc.scaleY) - 1, 2, 2);
   }
 
-  if (capture && capture.pts.length > 5) {
+  if (q && capture.pts.length > 5) {
     const st = captureStats();
     c.strokeStyle = col.fg; c.lineWidth = 1.5;
     const ex = X(st.cx), ey = Y(st.cy);
@@ -899,30 +1034,36 @@ function renderCal() {
   $("r-offy").textContent = `${Math.round(cc.offY)} mG`;
   $("r-scy").textContent = cc.scaleY.toFixed(3);
   $("r-base2").textContent = cc.baseline ? `${cc.baseline} mG` : "not set";
+  const zLines = cc.offZ == null ? "" : `
+/* z values are for tilt compensation, heading.c does not use them yet */
+#define MAG_OFFSET_Z   ${String(Math.round(cc.offZ)).padStart(5)}    /* mG */
+#define MAG_SCALE_Z    ${cc.scaleZ.toFixed(3)}f`;
   $("snippet").textContent =
 `/* mag calibration from SensorTile Live */
 #define MAG_OFFSET_X   ${String(Math.round(cc.offX)).padStart(5)}    /* mG */
 #define MAG_OFFSET_Y   ${String(Math.round(cc.offY)).padStart(5)}    /* mG */
 #define MAG_SCALE_Y    ${cc.scaleY.toFixed(3)}f
 #define MAG_BASELINE   ${String(cc.baseline ?? 0).padStart(5)}    /* mG, clean |B| */
-#define MAG_HOLD_PCT   ${String(settings.holdPct).padStart(5)}`;
+#define MAG_HOLD_PCT   ${String(settings.holdPct).padStart(5)}${zLines}`;
+  if (calMode === "full") renderFull();
 }
-$("capStart").addEventListener("click", () => { capture = { pts: [] }; renderCal(); });
+$("capStart").addEventListener("click", () => { capture = calMode === "full" ? newFullCapture() : { mode: "quick", pts: [] }; renderCal(); });
 $("capCancel").addEventListener("click", () => { capture = null; renderCal(); });
 $("capApply").addEventListener("click", () => {
+  if (capture.mode === "full") { applyFull(); return; }
   const st = captureStats();
   const rx = (st.maxX - st.minX) / 2, ry = (st.maxY - st.minY) / 2;
   const offX = st.cx, offY = st.cy, scaleY = ry > 0 ? rx / ry : 1;
   let sum = 0;
   for (const [x, y, z] of capture.pts) sum += Math.hypot(x - offX, (y - offY) * scaleY, z);
   cals[calKey()] = { offX: Math.round(offX), offY: Math.round(offY), scaleY: +scaleY.toFixed(3), baseline: Math.round(sum / capture.pts.length) };
-  store.set("cals", cals);
+  persistCals();
   capture = null; S.hx = S.hy = S.B = null; S.held = false;
   renderCal();
 });
 $("capReset").addEventListener("click", () => {
   cals[calKey()] = calKey() === "demo" ? { ...DEMO_CAL } : { ...NO_CAL };
-  store.set("cals", cals); S.hx = S.hy = S.B = null; S.held = false;
+  persistCals(); S.hx = S.hy = S.B = null; S.held = false;
   renderCal();
 });
 $("copySnippet").addEventListener("click", () => {
@@ -932,6 +1073,304 @@ $("copySnippet").addEventListener("click", () => {
   try { navigator.clipboard.writeText(text).then(() => done("[copied]"), select); } catch { select(); }
 });
 $("clearTrail").addEventListener("click", () => { S.trail = [{ x: 0, y: 0, h: 0, held: false, n: 0 }]; S.dist = 0; TV.init = false; });
+
+/* ---------- full calibration ---------- */
+/* Axis-aligned ellipsoid fit: A x^2 + B y^2 + C z^2 + D x + E y + F z = 1, least squares.
+   Readings are divided by FIT_NORM so the normal equations stay well conditioned. */
+const FIT_NORM = 500;
+const newFit = () => ({ ata: new Float64Array(36), atb: new Float64Array(6), n: 0 });
+function fitAdd(f, x, y, z) {
+  const u = x / FIT_NORM, v = y / FIT_NORM, w = z / FIT_NORM;
+  const r = [u * u, v * v, w * w, u, v, w];
+  for (let i = 0; i < 6; i++) {
+    f.atb[i] += r[i];
+    for (let j = 0; j < 6; j++) f.ata[i * 6 + j] += r[i] * r[j];
+  }
+  f.n++;
+}
+function solve6(a, b) {
+  const m = [];
+  for (let i = 0; i < 6; i++) m.push([...a.slice(i * 6, i * 6 + 6), b[i]]);
+  for (let c = 0; c < 6; c++) {
+    let p = c;
+    for (let r = c + 1; r < 6; r++) if (Math.abs(m[r][c]) > Math.abs(m[p][c])) p = r;
+    if (Math.abs(m[p][c]) < 1e-12) return null;
+    [m[c], m[p]] = [m[p], m[c]];
+    for (let r = c + 1; r < 6; r++) {
+      const k = m[r][c] / m[c][c];
+      for (let j = c; j < 7; j++) m[r][j] -= k * m[c][j];
+    }
+  }
+  const x = new Array(6);
+  for (let i = 5; i >= 0; i--) {
+    let t = m[i][6];
+    for (let j = i + 1; j < 6; j++) t -= m[i][j] * x[j];
+    x[i] = t / m[i][i];
+  }
+  return x;
+}
+/* { off: [x, y, z], r: [rx, ry, rz] } in mG, or null when the readings do not pin it down */
+function fitSolve(f) {
+  if (f.n < 30) return null;
+  const q = solve6(f.ata, f.atb);
+  if (!q) return null;
+  const [A, B, C, D, E, F] = q;
+  if (!(A > 0 && B > 0 && C > 0)) return null;
+  const cx = -D / (2 * A), cy = -E / (2 * B), cz = -F / (2 * C);
+  const G = 1 + A * cx * cx + B * cy * cy + C * cz * cz;
+  if (!(G > 0)) return null;
+  return {
+    off: [cx * FIT_NORM, cy * FIT_NORM, cz * FIT_NORM],
+    r: [Math.sqrt(G / A) * FIT_NORM, Math.sqrt(G / B) * FIT_NORM, Math.sqrt(G / C) * FIT_NORM],
+  };
+}
+const sane = r => Math.max(...r.r) / Math.min(...r.r) < 1.6;
+
+/* which body axis points up: the accelerometer reads +1 g along it when still */
+const POSES = [
+  { name: "z up", k: 2, s: 1 }, { name: "z down", k: 2, s: -1 },
+  { name: "x up", k: 0, s: 1 }, { name: "x down", k: 0, s: -1 },
+  { name: "y up", k: 1, s: 1 }, { name: "y down", k: 1, s: -1 },
+];
+const POSE_DONE = 0.7, POSE_PTS = 1500, FULL_PTS = 6000;
+const LEDES = {
+  quick: "Hold the board flat away from metal and turn it through a full circle. The offsets centre the circle and the baseline records what a clean field looks like.",
+  full: "Turn the board through a full circle in several positions, not just flat. That lets the page fit all three axes, which quick mode cannot, and tells you how good the fit is.",
+};
+let lastFull = null, triR = 500;
+
+function newFullCapture() {
+  return { mode: "full", pts: [], fit: newFit(), poses: POSES.map(() => ({ pts: [] })), cur: -1 };
+}
+function poseNow() {
+  if (!lastAcc) return -1;
+  const n = Math.hypot(lastAcc[0], lastAcc[1], lastAcc[2]);
+  if (n < 850 || n > 1150) return -1;
+  for (let k = 0; k < 3; k++) {
+    const a = lastAcc[k] / n;
+    if (Math.abs(a) > 0.85) return POSES.findIndex(p => p.k === k && p.s === (a > 0 ? 1 : -1));
+  }
+  return -1;
+}
+function capAdd(x, y, z) {
+  if (capture.mode === "quick") { capture.pts.push([x, y, z]); return; }
+  if (capture.pts.length < FULL_PTS) capture.pts.push([x, y, z]);
+  fitAdd(capture.fit, x, y, z);
+  const i = poseNow();
+  capture.cur = i;
+  if (i >= 0 && capture.poses[i].pts.length < POSE_PTS) {
+    const v = [x, y, z], k = POSES[i].k;
+    capture.poses[i].pts.push([v[(k + 1) % 3], v[(k + 2) % 3]]);
+  }
+}
+/* share of the circle swept by the readings in the plane across the up axis */
+function poseCoverage(P) {
+  if (P.pts.length < 20) return 0;
+  let a0 = Infinity, a1 = -Infinity, b0 = Infinity, b1 = -Infinity;
+  for (const [a, b] of P.pts) { if (a < a0) a0 = a; if (a > a1) a1 = a; if (b < b0) b0 = b; if (b > b1) b1 = b; }
+  const half = Math.max(a1 - a0, b1 - b0) / 2;
+  if (half < 80) return 0;
+  const ca = (a0 + a1) / 2, cb = (b0 + b1) / 2, bins = new Array(36).fill(false);
+  for (const [a, b] of P.pts) {
+    if (Math.hypot(a - ca, b - cb) < half * 0.6) continue;
+    bins[Math.floor((Math.atan2(b - cb, a - ca) + Math.PI) / (2 * Math.PI) * 36) % 36] = true;
+  }
+  return bins.filter(Boolean).length / 36;
+}
+function fullQuality(r) {
+  const n = capture.pts.length;
+  if (n < 30) return null;
+  const step = Math.max(1, Math.floor(n / 1500)), sy = r.r[0] / r.r[1], sz = r.r[0] / r.r[2];
+  let c = 0, s0 = 0, q0 = 0, s1 = 0, q1 = 0;
+  for (let i = 0; i < n; i += step) {
+    const [x, y, z] = capture.pts[i];
+    const b0 = Math.hypot(x, y, z), b1 = Math.hypot(x - r.off[0], (y - r.off[1]) * sy, (z - r.off[2]) * sz);
+    s0 += b0; q0 += b0 * b0; s1 += b1; q1 += b1 * b1; c++;
+  }
+  const spread = (sum, sq) => { const m = sum / c; return Math.sqrt(Math.max(0, sq / c - m * m)) / m; };
+  return { raw: spread(s0, q0), fit: spread(s1, q1) };
+}
+
+function setCalMode(m) {
+  calMode = m;
+  store.set("calMode", m);
+  capture = null;
+  document.querySelectorAll("[data-calmode]").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.calmode === m)));
+  $("cal-quick").hidden = m !== "quick";
+  $("cal-full").hidden = m !== "full";
+  $("calLede").textContent = LEDES[m];
+  renderCal();
+}
+document.querySelectorAll("[data-calmode]").forEach(b => b.addEventListener("click", () => setCalMode(b.dataset.calmode)));
+
+function applyFull() {
+  const r = fitSolve(capture.fit);
+  if (!r || !sane(r)) return;
+  cals[calKey()] = {
+    offX: Math.round(r.off[0]), offY: Math.round(r.off[1]), offZ: Math.round(r.off[2]),
+    scaleY: +(r.r[0] / r.r[1]).toFixed(3), scaleZ: +(r.r[0] / r.r[2]).toFixed(3),
+    baseline: Math.round(r.r[0]),
+  };
+  lastFull = { pts: capture.pts.slice(), cal: { ...cals[calKey()] } };
+  persistCals();
+  capture = null; S.hx = S.hy = S.B = null; S.held = false;
+  renderCal();
+}
+
+function renderFull() {
+  const live = capture && capture.mode === "full";
+  const cc = cal();
+  const r = live ? fitSolve(capture.fit) : null;
+  const ok = !!(r && sane(r));
+  const cov = POSES.map((P, i) => (live ? poseCoverage(capture.poses[i]) : 0));
+  const axisDone = [false, false, false];
+  POSES.forEach((P, i) => { if (cov[i] >= POSE_DONE) axisDone[P.k] = true; });
+  const rows = $("poses").children;
+  POSES.forEach((P, i) => {
+    const li = rows[i], done = cov[i] >= POSE_DONE, now = live && capture.cur === i;
+    li.classList.toggle("now", now);
+    li.classList.toggle("done", done);
+    li.querySelector(".pa").textContent = now ? "›" : "";
+    li.querySelector(".pm i").style.width = `${Math.min(100, cov[i] / POSE_DONE * 100)}%`;
+    li.querySelector(".pp").textContent = done ? "done" : live ? `${Math.round(cov[i] * 100)}%` : "–";
+  });
+
+  const ready = ok && axisDone.every(Boolean);
+  if (live) {
+    $("capApply").disabled = !ready;
+    $("capApply").title = ready ? "" : "Cover each axis first";
+  }
+
+  let hint;
+  if (!live) hint = cc.offZ != null ? "Full calibration is applied. Capture again to redo it." : "Start a capture, then put the board in each position and turn it slowly.";
+  else if (capture.cur < 0) hint = "Settle it flat or on an edge, so one axis points straight up.";
+  else if (cov[capture.cur] < POSE_DONE) hint = `Now ${POSES[capture.cur].name}. Turn it slowly through one full circle.`;
+  else if (ready) hint = "That is enough to apply. More positions give a steadier fit.";
+  else hint = `${POSES[capture.cur].name} is done. Move it to another position.`;
+  $("poseHint").textContent = hint;
+
+  const off = ok ? r.off : cc.offZ != null && !live ? [cc.offX, cc.offY, cc.offZ] : null;
+  const sc = ok ? [r.r[0] / r.r[1], r.r[0] / r.r[2]] : cc.offZ != null && !live ? [cc.scaleY, cc.scaleZ] : null;
+  $("r-fpts").textContent = live ? String(capture.fit.n) : "–";
+  $("r-foff").textContent = off ? `${Math.round(off[0])} · ${Math.round(off[1])} · ${Math.round(off[2])} mG` : "–";
+  $("r-fsc").textContent = sc ? `${sc[0].toFixed(3)} · ${sc[1].toFixed(3)}` : "–";
+  $("r-fbase").textContent = ok ? `${Math.round(r.r[0])} mG` : !live && cc.baseline ? `${cc.baseline} mG` : "–";
+  const q = ok ? fullQuality(r) : null;
+  $("r-fspread").textContent = q
+    ? `${(q.raw * 100).toFixed(0)}% → ${(q.fit * 100).toFixed(1)}% · ${q.fit <= 0.025 ? "good" : q.fit <= 0.05 ? "ok" : "poor"}`
+    : "–";
+}
+
+const cvTri = $("cv-tri");
+const TRI = [[0, 1, "x y"], [0, 2, "x z"], [1, 2, "y z"]];
+function drawTri(dt) {
+  const [c, w, h] = fit(cvTri);
+  if (!c) return;
+  const live = capture && capture.mode === "full";
+  const pts = live ? capture.pts : lastFull ? lastFull.pts : [];
+  let corr = null;
+  if (live) {
+    const r = fitSolve(capture.fit);
+    if (r && sane(r)) corr = { o: r.off, s: [1, r.r[0] / r.r[1], r.r[0] / r.r[2]], R: r.r[0] };
+  } else if (lastFull) {
+    const k = lastFull.cal;
+    corr = { o: [k.offX, k.offY, k.offZ], s: [1, k.scaleY, k.scaleZ], R: k.baseline };
+  }
+  const first = Math.max(0, pts.length - 2500);
+  let m = 450;
+  for (let i = first; i < pts.length; i++) m = Math.max(m, Math.abs(pts[i][0]) * 1.1, Math.abs(pts[i][1]) * 1.1, Math.abs(pts[i][2]) * 1.1);
+  triR += (m - triR) * ease(dt, 3);
+
+  const gap = 16, top = 16, ps = Math.min((w - 2 * gap) / 3, h - top);
+  TRI.forEach(([a, b, name], n) => {
+    const cx = n * (ps + gap) + ps / 2, cy = top + ps / 2, sc = (ps / 2 - 2) / triR;
+    c.lineWidth = 1; c.strokeStyle = col.line;
+    c.beginPath(); c.arc(cx, cy, ps / 2 - 2, 0, Math.PI * 2); c.stroke();
+    c.strokeStyle = col.faint;
+    c.beginPath(); c.moveTo(cx - ps / 2, cy + 0.5); c.lineTo(cx + ps / 2, cy + 0.5); c.moveTo(cx + 0.5, cy - ps / 2); c.lineTo(cx + 0.5, cy + ps / 2); c.stroke();
+    c.fillStyle = col.muted; c.font = font(10); c.textAlign = "left"; c.textBaseline = "alphabetic";
+    c.fillText(name, cx - ps / 2, top - 4);
+    c.globalAlpha = 0.55;
+    for (let i = first; i < pts.length; i++) c.fillRect(cx + pts[i][a] * sc - 1, cy - pts[i][b] * sc - 1, 2, 2);
+    c.globalAlpha = 1;
+    if (corr) {
+      c.fillStyle = col.fg;
+      for (let i = first; i < pts.length; i++) {
+        c.fillRect(cx + (pts[i][a] - corr.o[a]) * corr.s[a] * sc - 1, cy - (pts[i][b] - corr.o[b]) * corr.s[b] * sc - 1, 2, 2);
+      }
+      c.strokeStyle = col.muted; c.setLineDash([3, 4]);
+      c.beginPath(); c.arc(cx, cy, corr.R * sc, 0, Math.PI * 2); c.stroke(); c.setLineDash([]);
+    }
+  });
+  if (!pts.length) {
+    c.fillStyle = col.muted; c.textAlign = "center"; c.font = font(13);
+    c.fillText(conn === "live" ? "start a capture to see the readings" : "connect a source first", w / 2, h / 2 + 6);
+  }
+}
+
+/* ---------- recording ---------- */
+const REC_MAX = 200000;
+const REC_HEAD = "t_ms,label,ax,ay,az,mx,my,mz,steps,heading";
+const fmtTime = ms => { const t = Math.floor(ms / 1000); return `${Math.floor(t / 60)}:${String(t % 60).padStart(2, "0")}`; };
+const flash = (btn, msg, orig) => { btn.textContent = msg; setTimeout(() => { btn.textContent = orig; }, 1400); };
+
+function recRow(s, now) {
+  if (rec.rows.length >= REC_MAX) return;
+  const v = x => (x == null ? "" : x);
+  /* use the device's own clock when a source provides one, it is steadier than arrival time */
+  if (s.t != null && rec.s0 == null) rec.s0 = s.t;
+  rec.rows.push([
+    Math.round(s.t != null ? s.t - rec.s0 : now - rec.t0), recLabel, v(s.ax), v(s.ay), v(s.az), v(s.mx), v(s.my), v(s.mz),
+    s.steps == null ? "" : +s.steps.toFixed(1), s.heading == null ? "" : +s.heading.toFixed(1),
+  ].join(","));
+}
+function recToggle() {
+  if (rec && rec.on) { rec.on = false; rec.end = performance.now(); }
+  else if (conn === "live") rec = { on: true, rows: [], t0: performance.now(), end: 0, source };
+  renderRec();
+}
+const recCsv = () => `${REC_HEAD}\n${rec.rows.join("\n")}\n`;
+function recSave() {
+  const stamp = new Date().toISOString().slice(0, 19).replace(/[-:]/g, "").replace("T", "-");
+  try {
+    const url = URL.createObjectURL(new Blob([recCsv()], { type: "text/csv" }));
+    const a = document.createElement("a");
+    a.href = url; a.download = `sensortile-${rec.source}-${stamp}.csv`;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 4000);
+    flash($("recSave"), "[saved]", "[save csv]");
+  } catch { flash($("recSave"), "[could not save, try copy]", "[save csv]"); }
+}
+function recCopy() {
+  const btn = $("recCopy");
+  try { navigator.clipboard.writeText(recCsv()).then(() => flash(btn, "[copied]", "[copy]"), () => flash(btn, "[copy blocked, use save]", "[copy]")); }
+  catch { flash(btn, "[copy blocked, use save]", "[copy]"); }
+}
+function renderRec() {
+  const state = !rec ? "idle" : rec.on ? "recording" : "stopped";
+  $("r-rstate").textContent = state;
+  $("r-rtime").textContent = rec ? fmtTime((rec.on ? performance.now() : rec.end) - rec.t0) : "0:00";
+  $("r-rn").textContent = rec ? rec.rows.length.toLocaleString() : "0";
+  const tog = $("recToggle");
+  tog.textContent = state === "recording" ? "[stop]" : state === "stopped" ? "[record again]" : "[start recording]";
+  tog.disabled = state !== "recording" && conn !== "live";
+  ["recSave", "recCopy", "recDiscard"].forEach(id => { $(id).hidden = state !== "stopped"; });
+  $("recPreview").textContent = rec && rec.rows.length ? [REC_HEAD, ...rec.rows.slice(-4)].join("\n") : "Rows appear here while recording.";
+}
+function renderRecTag() {
+  const on = !!(rec && rec.on);
+  $("recTag").hidden = !on;
+  if (on) $("recTime").textContent = fmtTime(performance.now() - rec.t0);
+}
+$("recToggle").addEventListener("click", recToggle);
+$("recSave").addEventListener("click", recSave);
+$("recCopy").addEventListener("click", recCopy);
+$("recDiscard").addEventListener("click", () => { rec = null; renderRec(); });
+$("recLabel").addEventListener("input", e => { recLabel = e.target.value.replace(/[,\r\n]/g, " ").trim(); });
+document.querySelectorAll("[data-label]").forEach(b => b.addEventListener("click", () => {
+  $("recLabel").value = b.dataset.label;
+  recLabel = b.dataset.label;
+}));
 
 /* settings steppers */
 function setSetting(key, v, save = true) {
@@ -953,7 +1392,7 @@ document.querySelectorAll("[data-source]").forEach(b => b.addEventListener("clic
 const sign = v => (v > 0 ? "+" : v < 0 ? "−" : "");
 function renderReadouts() {
   const hz = sampleTimes.length;
-  $("meta").textContent = !source ? "not connected" : conn === "live" ? `${source} · ${hz} Hz` : conn === "connecting" ? `${source} · connecting` : "not connected";
+  $("metaTxt").textContent = !source ? "not connected" : conn === "live" ? `${source} · ${hz} Hz` : conn === "connecting" ? `${source} · connecting` : "not connected";
 
   const cc = cal(), hh = headingOut(), held = heldOut();
   $("r-heading").textContent = hh == null ? "–" : `${hh.toFixed(1)}° ${wind(hh)}${held ? " · held" : ""}`;
@@ -979,12 +1418,15 @@ function renderReadouts() {
   const live = gaps.length >= 2 && S.tNow - st[st.length - 1] < 1500;
   $("r-cad").textContent = live ? `${Math.round(60000 * gaps.length / gaps.reduce((a, b) => a + b, 0))} steps/min` : "–";
 
-  if (capture) {
+  if (capture && capture.mode === "quick") {
     const s = capture.pts.length > 5 ? captureStats() : null;
     $("r-cov").textContent = s ? `${Math.round(s.coverage * 100)}%` : "0%";
     $("capApply").disabled = !s || s.coverage < 0.8;
     $("capApply").title = $("capApply").disabled ? "Turn a full circle first" : "";
   } else $("r-cov").textContent = "–";
+  if (view === "calibrate" && calMode === "full") renderFull();
+  if (view === "record") renderRec();
+  renderRecTag();
 }
 
 /* ---------- loop ---------- */
@@ -996,7 +1438,7 @@ function frame(now) {
   if (view === "compass") drawCompass(dt);
   else if (view === "trail") drawTrail(dt);
   else if (view === "steps") drawScope(dt);
-  else drawCal(dt);
+  else if (view === "calibrate") { if (calMode === "full") drawTri(dt); else drawCal(dt); }
   if (view !== "compass") { const t = headingOut(); if (t != null) disp = t; }
   if (now - lastUi > 120) { lastUi = now; renderReadouts(); }
 }
@@ -1004,7 +1446,8 @@ function frame(now) {
 readTokens();
 resetData();
 setView(location.hash.slice(1) || store.get("view", "compass"));
-renderCal();
+setCalMode(calMode);
+renderRec();
 setSource("demo");
 requestAnimationFrame(frame);
 })();

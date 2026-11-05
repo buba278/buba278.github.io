@@ -143,6 +143,15 @@ main { flex: 1; min-width: 0; }
 .pat-line { stroke: var(--fg); stroke-width: 1; stroke-opacity: .32; }
 .pat-dot { fill: var(--fg); fill-opacity: .55; }
 
+.tdot { fill: var(--fg); fill-opacity: .6; stroke: var(--bord); stroke-width: .6px; }
+.fsbar { display: none; position: absolute; top: 10px; left: 12px; right: 12px; justify-content: space-between; align-items: flex-start; gap: 1em; pointer-events: none; }
+.fsbar > * { pointer-events: auto; background: var(--bg); border: 1px solid var(--line); border-radius: 3px; padding: 1px 9px; }
+.fsbar .fsctl { display: flex; gap: 1.2em; color: var(--muted); }
+.fsbar .fsctl .link:hover { color: var(--fg); }
+.fsbar #fsTitle { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.stage.on { position: fixed; inset: 0; z-index: 50; height: auto; width: auto; border: 0; border-radius: 0; }
+.stage:fullscreen { height: 100%; width: 100%; border: 0; border-radius: 0; }
+.stage.on .fsbar { display: flex; }
 .labels { pointer-events: none; }
 .cname { font-family: var(--mono); font-weight: bold; letter-spacing: .05em; fill: var(--muted); text-anchor: middle; dominant-baseline: central; paint-order: stroke; stroke: var(--halo); stroke-width: 2.5px; stroke-linejoin: round; }
 .cname.t, .cname.d { font-weight: normal; font-style: italic; letter-spacing: .01em; }
@@ -252,6 +261,7 @@ main { flex: 1; min-width: 0; }
       <button class="link" id="z-in">[zoom in]</button>
       <button class="link" id="z-out">[zoom out]</button>
       <button class="link" id="z-home">[reset view]</button>
+      <button class="link" id="z-fs">[fullscreen]</button>
     </div>
     </div>
 
@@ -263,6 +273,8 @@ main { flex: 1; min-width: 0; }
           <pattern id="dots" width="5" height="5" patternUnits="userSpaceOnUse"><circle class="pat-dot" cx="2.5" cy="2.5" r="0.9"/></pattern>
         </defs>
       </svg>
+      <div class="fsbar"><span id="fsTitle">world</span><span class="fsctl"><button class="link" data-fs="z-in">[zoom in]</button><button class="link" data-fs="z-out">[zoom out]</button><button class="link" data-fs="z-home">[reset]</button><button class="link" id="fs-exit">[exit]</button></span></div>
+      <div class="tip" id="tip" hidden></div>
     </div>
     <div class="detail" aria-live="polite">
       <p class="hint" id="hint">Select a country, territory, ocean or sea to see details here. Arrow keys pan and + / − zoom when the map is focused.</p>
@@ -271,7 +283,6 @@ main { flex: 1; min-width: 0; }
     </div>
   </main>
 </div>
-<div class="tip" id="tip" hidden></div>
 
 <script src="d3.min.js"></script>
 <script src="topojson-client.min.js"></script>
@@ -415,7 +426,7 @@ main { flex: 1; min-width: 0; }
   var hatchPat = document.getElementById('hatch'), dotPat = document.getElementById('dots'), crossPat = document.getElementById('cross');
 
   var labels = svg.append('g').attr('class', 'labels');
-  var gWater = labels.append('g'), gNames = labels.append('g'), gDots = labels.append('g'), gCaps = labels.append('g');
+  var gWater = labels.append('g'), gTiny = labels.append('g'), gNames = labels.append('g'), gDots = labels.append('g'), gCaps = labels.append('g');
   WATER.forEach(function (w) {
     w.el = gWater.append('text').attr('class', 'wlabel ' + w.type).attr('visibility', 'hidden').text(w.label).node();
     w.on = false;
@@ -429,7 +440,8 @@ main { flex: 1; min-width: 0; }
       it.dotEl = gDots.append('circle').attr('class', 'cdot' + (it.status === 'country' ? '' : ' ring')).attr('r', 3).attr('visibility', 'hidden').node();
       it.capEl = gCaps.append('text').attr('class', 'ccap').attr('visibility', 'hidden').text(it.cap).node();
     }
-    it.nameOn = false; it.dotOn = false; it.capOn = false;
+    it.tinyEl = gTiny.append('circle').attr('class', 'tdot').attr('r', 1.7).attr('visibility', 'hidden').node();
+    it.nameOn = false; it.dotOn = false; it.capOn = false; it.tinyOn = false;
   });
 
   /* ---------- text measurement ---------- */
@@ -451,7 +463,7 @@ main { flex: 1; min-width: 0; }
   var sel = null;
   var metaEl = document.getElementById('meta');
 
-  var zoom = d3.zoom().scaleExtent([1, 90]).on('zoom', function (e) {
+  var zoom = d3.zoom().scaleExtent([0.8, 90]).on('zoom', function (e) {
     gZoom.attr('transform', e.transform);
     var s = 1 / (e.transform.k * base.b);
     hatchPat.setAttribute('patternTransform', 'rotate(45) scale(' + s + ')');
@@ -619,6 +631,21 @@ main { flex: 1; min-width: 0; }
       }
     }
     for (i = 0; i < WATER.length; i++) if (WATER[i].type !== 'ocean') placeWater(WATER[i], T, k, rects);
+
+    /* pass 3: a tiny dot for every country that has no name or capital dot showing, so none go missing */
+    var tiny = [];
+    for (i = 0; i < seq.length; i++) {
+      it = seq[i];
+      var tOn = false;
+      if (showNames && allowed(it) && !it.nameOn && !it.dotOn && isFinite(it.x)) {
+        var tx = T.x + k * (base.ox + base.b * it.x), ty = T.y + k * (base.oy + base.b * it.y);
+        if (tx > -4 && tx < W + 4 && ty > -4 && ty < H + 4 && !hit(tiny, tx - 1.5, ty - 1.5, 3, 3)) {
+          tOn = true; tiny.push([tx - 1.5, ty - 1.5, 3, 3]);
+          it.tinyEl.setAttribute('cx', tx.toFixed(1)); it.tinyEl.setAttribute('cy', ty.toFixed(1));
+        }
+      }
+      if (tOn !== it.tinyOn) { it.tinyOn = tOn; setVis(it.tinyEl, tOn); }
+    }
   }
 
   /* ---------- regions: dim everything else ---------- */
@@ -695,7 +722,7 @@ main { flex: 1; min-width: 0; }
 
   /* ---------- selection and readout ---------- */
   var hintEl = document.getElementById('hint'), roEl = document.getElementById('readout'), noteEl = document.getElementById('note');
-  var titleEl = document.getElementById('viewTitle'), tagEl = document.getElementById('viewTag');
+  var fsTitleEl = document.getElementById('fsTitle'), titleEl = document.getElementById('viewTitle'), tagEl = document.getElementById('viewTag');
   function fmtLL(ll) {
     var la = ll[0], lo = ll[1];
     return Math.abs(la).toFixed(2) + '° ' + (la >= 0 ? 'N' : 'S') + ', ' + Math.abs(lo).toFixed(2) + '° ' + (lo >= 0 ? 'E' : 'W');
@@ -714,6 +741,7 @@ main { flex: 1; min-width: 0; }
     } else if (filtering()) { t = Object.keys(regionSet).map(function (k2) { return RNAME[k2]; }).join(' + '); }
     else t = 'world';
     titleEl.textContent = t;
+    fsTitleEl.textContent = t + (tag ? ' [' + tag + ']' : '');
     tagEl.hidden = !tag; tagEl.textContent = tag ? '[' + tag + ']' : '';
     tagEl.classList.toggle('alert', alert);
   }
@@ -787,6 +815,26 @@ main { flex: 1; min-width: 0; }
     clearSel();
     svg.transition().duration(reduceMotion ? 0 : 700).ease(d3.easeCubicInOut).call(zoom.transform, homeTransform());
   });
+  var fsBtn = document.getElementById('z-fs');
+  function isFs() { return document.fullscreenElement === stageEl || stageEl.classList.contains('fs'); }
+  function syncFs() {
+    var on = isFs();
+    stageEl.classList.toggle('on', on);
+    fsBtn.textContent = on ? '[exit fullscreen]' : '[fullscreen]';
+    resize();
+  }
+  function toggleFs() {
+    if (document.fullscreenElement) { document.exitFullscreen(); return; }
+    if (stageEl.classList.contains('fs')) { stageEl.classList.remove('fs'); syncFs(); return; }
+    var fallback = function () { stageEl.classList.add('fs'); syncFs(); };
+    if (stageEl.requestFullscreen) { try { stageEl.requestFullscreen().catch(fallback); } catch (e) { fallback(); } }
+    else fallback();
+  }
+  fsBtn.addEventListener('click', toggleFs);
+  document.getElementById('fs-exit').addEventListener('click', toggleFs);
+  document.querySelectorAll('[data-fs]').forEach(function (b) { b.addEventListener('click', function () { document.getElementById(b.getAttribute('data-fs')).click(); }); });
+  document.addEventListener('fullscreenchange', syncFs);
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && stageEl.classList.contains('fs')) toggleFs(); });
   function toggle(id, setter) {
     var b = document.getElementById(id);
     b.addEventListener('click', function () {

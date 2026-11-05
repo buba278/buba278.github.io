@@ -87,6 +87,7 @@ a:hover, .link:hover:not(:disabled) { text-decoration: underline; }
 .key { list-style: none; display: grid; gap: .6em; color: var(--muted); }
 .key li { display: flex; align-items: center; gap: 7px; }
 .key .sw.t { background: repeating-linear-gradient(45deg, var(--fg) 0 1px, var(--c-other) 1px 3.5px); }
+.key .sw.n { background: repeating-linear-gradient(45deg, var(--fg) 0 1px, transparent 1px 3.5px), repeating-linear-gradient(-45deg, var(--fg) 0 1px, var(--c-antarctic) 1px 3.5px); }
 .key .sw.d { background-color: var(--c-other); background-image: radial-gradient(var(--fg) 0.8px, transparent 1.1px); background-size: 3.5px 3.5px; }
 .key .ring { width: 8px; height: 8px; border-radius: 50%; border: 1.5px solid var(--fg); flex-shrink: 0; }
 .key .fill { width: 8px; height: 8px; border-radius: 50%; background: var(--fg); flex-shrink: 0; }
@@ -97,9 +98,10 @@ main { flex: 1; min-width: 0; }
 .head .tag { color: var(--muted); margin-left: .8em; white-space: nowrap; }
 .head .tag.alert { color: var(--fg); }
 .head .meta { color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
-.lede { color: var(--muted); margin: .4em 0 1.2em; max-width: 64ch; }
+.lede { color: var(--muted); margin: .2em 0 .8em; }
 
-.finder { position: relative; max-width: 340px; margin-bottom: 1em; }
+.bar { display: flex; align-items: flex-end; justify-content: space-between; gap: 1.6em; flex-wrap: wrap; margin-bottom: .8em; }
+.finder { position: relative; width: 340px; max-width: 100%; }
 .find {
   font: inherit; color: var(--fg); background: transparent; border: 0; border-bottom: 1px dashed var(--line);
   width: 100%; padding: 0 0 2px; border-radius: 0; -webkit-appearance: none; appearance: none;
@@ -120,7 +122,7 @@ main { flex: 1; min-width: 0; }
 .stage { position: relative; height: clamp(340px, 58vh, 600px); border: 1px solid var(--line); border-radius: 3px; overflow: hidden; background: var(--sea); }
 #map { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; cursor: grab; user-select: none; -webkit-user-select: none; }
 #map:active { cursor: grabbing; }
-#map:focus-visible { outline-offset: -4px; }
+#map:focus, #map:focus-visible { outline: 0; }
 
 .sphere { fill: var(--sphere); stroke: var(--line); stroke-width: 1px; vector-effect: non-scaling-stroke; }
 .grat { fill: none; stroke: var(--grat); stroke-width: 0.6px; vector-effect: non-scaling-stroke; }
@@ -132,11 +134,12 @@ main { flex: 1; min-width: 0; }
 .r-Oceania { --land: var(--c-oceania); }
 .r-Antarctic { --land: var(--c-antarctic); }
 .country:hover { fill: color-mix(in srgb, var(--land) 80%, var(--fg)); }
-.country.sel { fill: color-mix(in srgb, var(--land) 70%, var(--fg)); stroke: var(--fg); stroke-width: 1.6px; }
+.country.sel { fill: color-mix(in srgb, var(--land) 62%, var(--fg)); }
 .country.dim { opacity: .3; }
 .hl { fill: url(#hatch); pointer-events: none; }
 .dt { fill: url(#dots); pointer-events: none; }
-.hl.dim, .dt.dim { opacity: .3; }
+.ns { fill: url(#cross); pointer-events: none; }
+.hl.dim, .dt.dim, .ns.dim { opacity: .3; }
 .pat-line { stroke: var(--fg); stroke-width: 1; stroke-opacity: .32; }
 .pat-dot { fill: var(--fg); fill-opacity: .55; }
 
@@ -155,20 +158,28 @@ main { flex: 1; min-width: 0; }
 .wlabel.sea { letter-spacing: .08em; }
 .wlabel:hover, .wlabel.sel { fill: var(--fg); }
 
-.actions { margin-top: 1em; display: flex; gap: 1.6em; flex-wrap: wrap; color: var(--muted); }
+.actions { display: flex; gap: 1.6em; flex-wrap: wrap; color: var(--muted); }
 .actions .link:hover { color: var(--fg); }
-.detail { margin-top: 1.6em; min-height: 11em; }
+.detail { margin-top: 1em; min-height: 11em; }
 .hint { color: var(--muted); max-width: 60ch; }
-.readout { list-style: none; display: grid; gap: .6em; max-width: 480px; }
+.readout { list-style: none; display: grid; gap: .6em; }
 .readout li { display: flex; justify-content: space-between; align-items: baseline; gap: 14px; }
 .readout .k { color: var(--muted); flex-shrink: 0; }
-.readout .v { text-align: right; min-width: 0; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+.readout .v { text-align: right; text-wrap: balance; min-width: 0; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
 .readout .v.flag { color: var(--fg); text-decoration: underline; text-decoration-style: dashed; text-underline-offset: 3px; }
-.note { color: var(--muted); margin-top: 1.2em; max-width: 56ch; }
+.note { color: var(--muted); margin-top: 1em; max-width: 90ch; }
 .note:empty { display: none; }
 .tip { position: fixed; z-index: 20; pointer-events: none; padding: 2px 9px; border-radius: 3px; background: var(--bg); border: 1px solid var(--line); white-space: nowrap; max-width: 80vw; overflow: hidden; text-overflow: ellipsis; }
 .tip em, .tip span { color: var(--muted); }
 
+@media (min-width: 641px) {
+  body { padding-block: 14px; }
+  .container { height: calc(100vh - 28px); height: calc(100dvh - 28px); min-height: 560px; }
+  .sidebar { overflow-y: auto; scrollbar-width: none; }
+  main { display: flex; flex-direction: column; }
+  .stage { flex: 1; height: auto; min-height: 240px; }
+  .detail { flex: none; height: 13em; min-height: 0; overflow-y: auto; margin-top: .9em; }
+}
 @media (max-width: 640px) {
   .container { flex-direction: column; gap: 1.2em; }
   .sidebar { display: contents; }
@@ -219,6 +230,7 @@ main { flex: 1; min-width: 0; }
         <li><span class="ring"></span>territory capital</li>
         <li><span class="sw t"></span>territory (DK = owner)</li>
         <li><span class="sw d"></span>disputed*</li>
+        <li><span class="sw n"></span>no state</li>
       </ul>
     </div>
     <div class="group">
@@ -231,25 +243,27 @@ main { flex: 1; min-width: 0; }
     <div class="head"><span class="title"><span id="viewTitle">world</span><span class="tag" id="viewTag" hidden></span></span><span class="meta" id="meta"></span></div>
     <p class="lede" id="lede"></p>
 
+    <div class="bar">
     <div class="finder">
       <input class="find" id="q" type="search" placeholder="find a country, capital or sea" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="false" aria-controls="found" aria-autocomplete="list" aria-label="find a country, capital or sea">
       <ul class="found" id="found" role="listbox" hidden></ul>
-    </div>
-
-    <div class="stage" id="stage">
-      <svg id="map" role="application" aria-label="Zoomable world map. Arrow keys pan, plus and minus zoom, zero resets." tabindex="0">
-        <defs>
-          <pattern id="hatch" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line class="pat-line" x1="0" y1="0" x2="0" y2="6"/></pattern>
-          <pattern id="dots" width="5" height="5" patternUnits="userSpaceOnUse"><circle class="pat-dot" cx="2.5" cy="2.5" r="0.9"/></pattern>
-        </defs>
-      </svg>
     </div>
     <div class="actions">
       <button class="link" id="z-in">[zoom in]</button>
       <button class="link" id="z-out">[zoom out]</button>
       <button class="link" id="z-home">[reset view]</button>
     </div>
+    </div>
 
+    <div class="stage" id="stage">
+      <svg id="map" role="application" aria-label="Zoomable world map. Arrow keys pan, plus and minus zoom, zero resets." tabindex="0">
+        <defs>
+          <pattern id="hatch" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line class="pat-line" x1="0" y1="0" x2="0" y2="6"/></pattern>
+          <pattern id="cross" width="7" height="7" patternUnits="userSpaceOnUse"><path class="pat-line" d="M0 0L7 7M7 0L0 7"/></pattern>
+          <pattern id="dots" width="5" height="5" patternUnits="userSpaceOnUse"><circle class="pat-dot" cx="2.5" cy="2.5" r="0.9"/></pattern>
+        </defs>
+      </svg>
+    </div>
     <div class="detail" aria-live="polite">
       <p class="hint" id="hint">Select a country, territory, ocean or sea to see details here. Arrow keys pan and + / − zoom when the map is focused.</p>
       <ul class="readout" id="readout" hidden></ul>
@@ -394,11 +408,11 @@ main { flex: 1; min-width: 0; }
     .each(function (d) { d.pathEl = this; this.__it = d; });
   var gH = gBase.append('g');
   items.forEach(function (it) {
-    if (it.status === 'territory' || it.status === 'disputed') {
-      it.hatchEl = gH.append('path').attr('class', it.status === 'territory' ? 'hl' : 'dt').attr('d', path(it.f)).node();
+    if (it.status === 'territory' || it.status === 'disputed' || it.status === 'other') {
+      it.hatchEl = gH.append('path').attr('class', it.status === 'territory' ? 'hl' : it.status === 'disputed' ? 'dt' : 'ns').attr('d', path(it.f)).node();
     }
   });
-  var hatchPat = document.getElementById('hatch'), dotPat = document.getElementById('dots');
+  var hatchPat = document.getElementById('hatch'), dotPat = document.getElementById('dots'), crossPat = document.getElementById('cross');
 
   var labels = svg.append('g').attr('class', 'labels');
   var gWater = labels.append('g'), gNames = labels.append('g'), gDots = labels.append('g'), gCaps = labels.append('g');
@@ -442,6 +456,7 @@ main { flex: 1; min-width: 0; }
     var s = 1 / (e.transform.k * base.b);
     hatchPat.setAttribute('patternTransform', 'rotate(45) scale(' + s + ')');
     dotPat.setAttribute('patternTransform', 'scale(' + s + ')');
+    crossPat.setAttribute('patternTransform', 'scale(' + s + ')');
     metaEl.textContent = e.transform.k.toFixed(1) + '×';
     schedule();
   });
@@ -456,7 +471,7 @@ main { flex: 1; min-width: 0; }
     base.oy = (h - WH * base.b) / 2;
     svg.attr('viewBox', '0 0 ' + w + ' ' + h);
     gBase.attr('transform', 'translate(' + base.ox + ',' + base.oy + ') scale(' + base.b + ')');
-    var pad = 90; /* lets you pan past the map edge so edge labels can be read */
+    var pad = Math.round(Math.max(w, h) * 0.3); /* lets you pan well past the map edge */
     zoom.extent([[0, 0], [w, h]]).translateExtent([[base.ox - pad, base.oy - pad], [base.ox + WW * base.b + pad, base.oy + WH * base.b + pad]]);
     svg.call(zoom.transform, d3.zoomTransform(svgNode));
     schedule();
@@ -617,7 +632,7 @@ main { flex: 1; min-width: 0; }
     updateHead();
   }
   function applyTerrToggle() {
-    gH.attr('display', showTerr ? null : 'none');
+    items.forEach(function (it) { if (it.hatchEl && it.status === 'territory') it.hatchEl.style.display = showTerr ? '' : 'none'; });
   }
   function setRegions(keys, fly) {
     regionSet = {}; regionCount = 0;
@@ -688,7 +703,7 @@ main { flex: 1; min-width: 0; }
   function statusTag(it) {
     if (it.status === 'territory') return it.sov ? 'territory · ' + it.sov.replace(/^the /, '') : 'territory';
     if (it.status === 'disputed') return 'disputed';
-    if (it.status === 'other') return 'no sovereign state';
+    if (it.status === 'other') return 'not a country';
     return '';
   }
   function updateHead() {

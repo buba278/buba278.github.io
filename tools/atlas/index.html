@@ -1,0 +1,884 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>World Atlas</title>
+<meta name="description" content="Zoomable world map with every country, territory and capital labelled, region focus, and short notes on the oceans and seas.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text x=%2250%22 y=%22.85em%22 font-size=%2270%22 text-anchor=%22middle%22 font-family=%22monospace%22>CM</text></svg>">
+<style>
+/* layout: the website's two-column page, a 120px text sidebar beside one pannable map */
+:root {
+  --bg: #fff;
+  --fg: #333;
+  --muted: #777;
+  --line: #d2d2d2;
+  --faint: #ececec;
+  --code: #f0f0f0;
+  --mono: "Menlo", "Monaco", "Consolas", "Liberation Mono", "Courier New", monospace;
+  --sea: #e3ebef;
+  --sphere: #eef3f6;
+  --grat: rgba(60, 90, 105, 0.14);
+  --halo: rgba(238, 243, 246, 0.7);
+  --water: #55788b;
+  --bord: #fbfcfc;
+  --c-africa: #e6d0a2;
+  --c-americas: #c9ddb1;
+  --c-asia: #e8c5ad;
+  --c-europe: #cfc9e4;
+  --c-oceania: #b5dbd2;
+  --c-antarctic: #f0f4f5;
+  --c-other: #dadcd6;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #1e1e1e; --fg: #ccc; --muted: #888; --line: #474747; --faint: #2a2a2a; --code: #2d2d2d;
+    --sea: #151c21; --sphere: #1a242b; --grat: rgba(180, 210, 225, 0.09); --halo: rgba(21, 28, 33, 0.72); --water: #82a5b8; --bord: #121a20;
+    --c-africa: #5c4e36; --c-americas: #405337; --c-asia: #5d4438; --c-europe: #4b4868; --c-oceania: #305850; --c-antarctic: #3b474d; --c-other: #3a4347;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #1e1e1e; --fg: #ccc; --muted: #888; --line: #474747; --faint: #2a2a2a; --code: #2d2d2d;
+  --sea: #151c21; --sphere: #1a242b; --grat: rgba(180, 210, 225, 0.09); --halo: rgba(21, 28, 33, 0.72); --water: #82a5b8; --bord: #121a20;
+  --c-africa: #5c4e36; --c-americas: #405337; --c-asia: #5d4438; --c-europe: #4b4868; --c-oceania: #305850; --c-antarctic: #3b474d; --c-other: #3a4347;
+  color-scheme: dark;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { background: var(--bg); }
+body {
+  font: 13px/1.6 var(--mono);
+  color: var(--fg);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  padding-block: 20px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+a, .link {
+  color: inherit; text-decoration: none; background: none; border: 0;
+  font: inherit; cursor: pointer; padding: 0; text-align: left;
+}
+a:hover, .link:hover:not(:disabled) { text-decoration: underline; }
+.link:disabled { color: var(--muted); cursor: default; }
+:focus-visible { outline: 1px dashed var(--fg); outline-offset: 3px; }
+
+.container { display: flex; max-width: 1000px; margin: 0 auto; gap: 25px; }
+.sidebar { width: 120px; flex-shrink: 0; }
+.sidebar h1 { font-size: 1em; font-weight: bold; margin-bottom: 1.6em; }
+.back { display: inline-block; color: var(--muted); margin-bottom: .8em; }
+.group { margin-top: 2.2em; }
+.group.first { margin-top: 0; }
+.group h2 { font-size: 1em; font-weight: normal; color: var(--muted); margin-bottom: .8em; }
+.opts { list-style: none; display: grid; gap: .6em; }
+.opts .link { color: var(--muted); display: flex; align-items: center; gap: 7px; width: 100%; }
+.opts .link[aria-pressed="true"] { color: var(--fg); }
+.dot { width: 5px; height: 5px; border-radius: 50%; background: currentColor; opacity: 0; flex-shrink: 0; }
+.opts .link[aria-pressed="true"] .dot { opacity: .85; }
+.sw { width: 8px; height: 8px; flex-shrink: 0; border: 1px solid var(--line); background: var(--c-other); }
+.sw.americas { background: var(--c-americas); }
+.sw.europe { background: var(--c-europe); }
+.sw.africa { background: var(--c-africa); }
+.sw.asia { background: var(--c-asia); }
+.sw.oceania { background: var(--c-oceania); }
+.sw.antarctica { background: var(--c-antarctic); }
+.sw.all { background: linear-gradient(135deg, var(--c-americas) 0 33%, var(--c-asia) 33% 66%, var(--c-europe) 66%); }
+.key { list-style: none; display: grid; gap: .6em; color: var(--muted); }
+.key li { display: flex; align-items: center; gap: 7px; }
+.key .sw.t { background: repeating-linear-gradient(45deg, var(--fg) 0 1px, var(--c-other) 1px 3.5px); }
+.key .sw.d { background-color: var(--c-other); background-image: radial-gradient(var(--fg) 0.8px, transparent 1.1px); background-size: 3.5px 3.5px; }
+.key .ring { width: 8px; height: 8px; border-radius: 50%; border: 1.5px solid var(--fg); flex-shrink: 0; }
+.key .fill { width: 8px; height: 8px; border-radius: 50%; background: var(--fg); flex-shrink: 0; }
+
+main { flex: 1; min-width: 0; }
+.head { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
+.head .title { min-width: 0; overflow-wrap: anywhere; }
+.head .tag { color: var(--muted); margin-left: .8em; white-space: nowrap; }
+.head .tag.alert { color: var(--fg); }
+.head .meta { color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.lede { color: var(--muted); margin: .4em 0 1.2em; max-width: 64ch; }
+
+.finder { position: relative; max-width: 340px; margin-bottom: 1em; }
+.find {
+  font: inherit; color: var(--fg); background: transparent; border: 0; border-bottom: 1px dashed var(--line);
+  width: 100%; padding: 0 0 2px; border-radius: 0; -webkit-appearance: none; appearance: none;
+}
+.find::placeholder { color: var(--muted); opacity: .75; }
+.find:focus-visible { outline: 0; border-bottom: 1px solid var(--fg); }
+.found {
+  position: absolute; left: 0; right: 0; top: calc(100% + 6px); z-index: 5; list-style: none;
+  background: var(--bg); border: 1px solid var(--line); border-radius: 3px; padding: 4px 0; max-height: 300px; overflow-y: auto;
+}
+.found li { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; padding: 2px 10px; cursor: pointer; min-width: 0; }
+.found li .n { overflow-wrap: anywhere; }
+.found li .c { color: var(--muted); text-align: right; font-size: .95em; }
+.found li[aria-selected="true"], .found li:hover { background: var(--faint); }
+.found li.none { color: var(--muted); cursor: default; }
+.found li.none:hover { background: none; }
+
+.stage { position: relative; height: clamp(340px, 58vh, 600px); border: 1px solid var(--line); border-radius: 3px; overflow: hidden; background: var(--sea); }
+#map { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; cursor: grab; user-select: none; -webkit-user-select: none; }
+#map:active { cursor: grabbing; }
+#map:focus-visible { outline-offset: -4px; }
+
+.sphere { fill: var(--sphere); stroke: var(--line); stroke-width: 1px; vector-effect: non-scaling-stroke; }
+.grat { fill: none; stroke: var(--grat); stroke-width: 0.6px; vector-effect: non-scaling-stroke; }
+.country { --land: var(--c-other); fill: var(--land); stroke: var(--bord); stroke-width: 0.7px; stroke-linejoin: round; vector-effect: non-scaling-stroke; cursor: pointer; transition: opacity .25s; }
+.r-Africa { --land: var(--c-africa); }
+.r-Americas { --land: var(--c-americas); }
+.r-Asia { --land: var(--c-asia); }
+.r-Europe { --land: var(--c-europe); }
+.r-Oceania { --land: var(--c-oceania); }
+.r-Antarctic { --land: var(--c-antarctic); }
+.country:hover { fill: color-mix(in srgb, var(--land) 80%, var(--fg)); }
+.country.sel { fill: color-mix(in srgb, var(--land) 70%, var(--fg)); stroke: var(--fg); stroke-width: 1.6px; }
+.country.dim { opacity: .3; }
+.hl { fill: url(#hatch); pointer-events: none; }
+.dt { fill: url(#dots); pointer-events: none; }
+.hl.dim, .dt.dim { opacity: .3; }
+.pat-line { stroke: var(--fg); stroke-width: 1; stroke-opacity: .32; }
+.pat-dot { fill: var(--fg); fill-opacity: .55; }
+
+.labels { pointer-events: none; }
+.cname { font-family: var(--mono); font-weight: bold; letter-spacing: .05em; fill: var(--muted); text-anchor: middle; dominant-baseline: central; paint-order: stroke; stroke: var(--halo); stroke-width: 2.5px; stroke-linejoin: round; }
+.cname.t, .cname.d { font-weight: normal; font-style: italic; letter-spacing: .01em; }
+.cname.sel { fill: var(--fg); }
+.ccap { font-family: var(--mono); font-style: italic; fill: var(--fg); dominant-baseline: central; paint-order: stroke; stroke: var(--halo); stroke-width: 3px; stroke-linejoin: round; }
+.ccap.sel { font-style: normal; font-weight: bold; }
+.cdot { fill: var(--fg); stroke: var(--bord); stroke-width: 1.3px; }
+.cdot.ring { fill: var(--bg); stroke: var(--fg); stroke-width: 1.4px; }
+.cdot.sel { stroke: var(--bg); stroke-width: 2px; }
+.cdot.ring.sel { fill: var(--bg); stroke: var(--fg); stroke-width: 2.2px; }
+.wlabel { font-family: var(--mono); font-style: italic; fill: var(--water); text-anchor: middle; dominant-baseline: central; paint-order: stroke; stroke: var(--halo); stroke-width: 2.5px; stroke-linejoin: round; pointer-events: all; cursor: pointer; }
+.wlabel.ocean { letter-spacing: .3em; }
+.wlabel.sea { letter-spacing: .08em; }
+.wlabel:hover, .wlabel.sel { fill: var(--fg); }
+
+.actions { margin-top: 1em; display: flex; gap: 1.6em; flex-wrap: wrap; color: var(--muted); }
+.actions .link:hover { color: var(--fg); }
+.detail { margin-top: 1.6em; min-height: 11em; }
+.hint { color: var(--muted); max-width: 60ch; }
+.readout { list-style: none; display: grid; gap: .6em; max-width: 480px; }
+.readout li { display: flex; justify-content: space-between; align-items: baseline; gap: 14px; }
+.readout .k { color: var(--muted); flex-shrink: 0; }
+.readout .v { text-align: right; min-width: 0; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+.readout .v.flag { color: var(--fg); text-decoration: underline; text-decoration-style: dashed; text-underline-offset: 3px; }
+.note { color: var(--muted); margin-top: 1.2em; max-width: 56ch; }
+.note:empty { display: none; }
+.tip { position: fixed; z-index: 20; pointer-events: none; padding: 2px 9px; border-radius: 3px; background: var(--bg); border: 1px solid var(--line); white-space: nowrap; max-width: 80vw; overflow: hidden; text-overflow: ellipsis; }
+.tip em, .tip span { color: var(--muted); }
+
+@media (max-width: 640px) {
+  .container { flex-direction: column; gap: 1.2em; }
+  .sidebar { display: contents; }
+  .sidebar .back, .sidebar h1 { order: 0; }
+  .sidebar .group { order: 3; margin-top: 0; }
+  .sidebar .group.first { order: 1; }
+  main { order: 2; }
+  .sidebar h1 { margin-bottom: .8em; }
+  .sidebar h1 br { display: none; }
+  .opts { grid-auto-flow: row; grid-template-columns: repeat(auto-fill, minmax(8.5em, 1fr)); gap: .4em 1em; }
+  .key { grid-template-columns: repeat(auto-fill, minmax(8.5em, 1fr)); gap: .4em 1em; }
+  .stage { height: clamp(320px, 62vh, 560px); }
+  .detail { min-height: 0; }
+}
+@media (prefers-reduced-motion: reduce) { .country { transition: none; } }
+</style>
+</head>
+<body>
+<div class="container">
+  <aside class="sidebar">
+    <a class="back" href="../">← tools</a>
+    <h1>World<br> Atlas</h1>
+    <div class="group first">
+      <h2>region</h2>
+      <ul class="opts" id="regions">
+        <li><button class="link" data-region="all" aria-pressed="true"><span class="sw all"></span>all</button></li>
+        <li><button class="link" data-region="americas" aria-pressed="false"><span class="sw americas"></span>americas</button></li>
+        <li><button class="link" data-region="europe" aria-pressed="false"><span class="sw europe"></span>europe</button></li>
+        <li><button class="link" data-region="africa" aria-pressed="false"><span class="sw africa"></span>africa</button></li>
+        <li><button class="link" data-region="asia" aria-pressed="false"><span class="sw asia"></span>asia</button></li>
+        <li><button class="link" data-region="oceania" aria-pressed="false"><span class="sw oceania"></span>oceania</button></li>
+        <li><button class="link" data-region="antarctica" aria-pressed="false"><span class="sw antarctica"></span>antarctica</button></li>
+      </ul>
+    </div>
+    <div class="group">
+      <h2>labels</h2>
+      <ul class="opts">
+        <li><button class="link" id="l-names" aria-pressed="true"><span class="dot"></span>names</button></li>
+        <li><button class="link" id="l-caps" aria-pressed="true"><span class="dot"></span>capitals</button></li>
+        <li><button class="link" id="l-terr" aria-pressed="true"><span class="dot"></span>territories</button></li>
+        <li><button class="link" id="l-water" aria-pressed="true"><span class="dot"></span>oceans</button></li>
+      </ul>
+    </div>
+    <div class="group">
+      <h2>key</h2>
+      <ul class="key">
+        <li><span class="fill"></span>capital</li>
+        <li><span class="ring"></span>territory capital</li>
+        <li><span class="sw t"></span>territory (DK = owner)</li>
+        <li><span class="sw d"></span>disputed*</li>
+      </ul>
+    </div>
+    <div class="group">
+      <h2>oceans</h2>
+      <ul class="opts" id="oceans"></ul>
+    </div>
+  </aside>
+
+  <main>
+    <div class="head"><span class="title"><span id="viewTitle">world</span><span class="tag" id="viewTag" hidden></span></span><span class="meta" id="meta"></span></div>
+    <p class="lede" id="lede"></p>
+
+    <div class="finder">
+      <input class="find" id="q" type="search" placeholder="find a country, capital or sea" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="false" aria-controls="found" aria-autocomplete="list" aria-label="find a country, capital or sea">
+      <ul class="found" id="found" role="listbox" hidden></ul>
+    </div>
+
+    <div class="stage" id="stage">
+      <svg id="map" role="application" aria-label="Zoomable world map. Arrow keys pan, plus and minus zoom, zero resets." tabindex="0">
+        <defs>
+          <pattern id="hatch" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line class="pat-line" x1="0" y1="0" x2="0" y2="6"/></pattern>
+          <pattern id="dots" width="5" height="5" patternUnits="userSpaceOnUse"><circle class="pat-dot" cx="2.5" cy="2.5" r="0.9"/></pattern>
+        </defs>
+      </svg>
+    </div>
+    <div class="actions">
+      <button class="link" id="z-in">[zoom in]</button>
+      <button class="link" id="z-out">[zoom out]</button>
+      <button class="link" id="z-home">[reset view]</button>
+    </div>
+
+    <div class="detail" aria-live="polite">
+      <p class="hint" id="hint">Select a country, territory, ocean or sea to see details here. Arrow keys pan and + / − zoom when the map is focused.</p>
+      <ul class="readout" id="readout" hidden></ul>
+      <p class="note" id="note"></p>
+    </div>
+  </main>
+</div>
+<div class="tip" id="tip" hidden></div>
+
+<script src="d3.min.js"></script>
+<script src="topojson-client.min.js"></script>
+<script src="world-data.js"></script>
+<script>
+(function () {
+  'use strict';
+  var TOPO = window.ATLAS.topo, META = window.ATLAS.meta;
+  var FONT = '"Menlo","Monaco","Consolas","Liberation Mono","Courier New",monospace';
+
+  var stageEl = document.getElementById('stage');
+  var svg = d3.select('#map');
+  var svgNode = svg.node();
+  var reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  /* ---------- projection in a fixed 1000-unit-wide space ---------- */
+  var proj = d3.geoNaturalEarth1().scale(1).translate([0, 0]);
+  var bb = d3.geoPath(proj).bounds({ type: 'Sphere' });
+  var sc = 1000 / (bb[1][0] - bb[0][0]);
+  proj.scale(sc).translate([-bb[0][0] * sc, -bb[0][1] * sc]);
+  var WW = 1000, WH = (bb[1][1] - bb[0][1]) * sc;
+  var path = d3.geoPath(proj);
+  var feats = topojson.feature(TOPO, TOPO.objects.countries).features;
+
+  var RKEY = { Americas: 'americas', Europe: 'europe', Africa: 'africa', Asia: 'asia', Oceania: 'oceania', Antarctic: 'antarctica' };
+  var RNAME = { americas: 'americas', europe: 'europe', africa: 'africa', asia: 'asia', oceania: 'oceania', antarctica: 'antarctica' };
+  /* lon/lat boxes used to frame a region: [lonMin, latMin, lonMax, latMax] */
+  var RBOX = {
+    americas: [-168, -56, -34, 72], europe: [-25, 34, 46, 72], africa: [-20, -36, 52, 38],
+    asia: [26, -11, 150, 58], oceania: [110, -48, 180, 8], antarctica: [-180, -90, 180, -62]
+  };
+
+  /* ---------- oceans and seas ---------- */
+  var WATER = [
+    { name: 'Pacific Ocean', type: 'ocean', anchors: [[28, -150], [-8, -132], [-26, -124], [12, 165]], view: [8, -150, 1.7],
+      rows: [['area', 'about 165 million km²'], ['deepest', 'Challenger Deep, about 10.9 km']],
+      note: 'The largest and deepest ocean, covering about a third of the planet. The Mariana Trench holds the deepest point on Earth, and most of the basin is ringed by trenches and volcanoes.' },
+    { name: 'Atlantic Ocean', type: 'ocean', anchors: [[30, -42], [-15, -17], [8, -30]], view: [8, -30, 1.9],
+      rows: [['area', 'about 106 million km²'], ['deepest', 'Milwaukee Deep, about 8.4 km']],
+      note: 'The second largest ocean, an S-shaped basin between the Americas and Europe and Africa. The Mid-Atlantic Ridge runs down its middle, and the basin is still widening by a few centimetres a year.' },
+    { name: 'Indian Ocean', type: 'ocean', anchors: [[-14, 78], [-28, 90]], view: [-18, 80, 2.2],
+      rows: [['area', 'about 70 million km²'], ['deepest', 'Java Trench, about 7.3 km']],
+      note: 'The warmest ocean, mostly south of the equator. Seasonal monsoon winds reverse its surface currents twice a year, which shaped centuries of sailing routes.' },
+    { name: 'Southern Ocean', type: 'ocean', anchors: [[-57, 70], [-57, -135], [-58, -30], [-57, 150]], view: [-62, 10, 1.6],
+      rows: [['area', 'about 20 million km²'], ['deepest', 'South Sandwich Trench, about 7.4 km']],
+      note: 'Circles Antarctica with no continent to its north. The Antarctic Circumpolar Current carries more water than any other current as it flows eastward. The International Hydrographic Organization named it in 2000, and National Geographic recognised it as the fifth ocean in 2021.' },
+    { name: 'Arctic Ocean', type: 'ocean', anchors: [[84, 40], [80, -140]], view: [82, 0, 2.4],
+      rows: [['area', 'about 14 million km²'], ['deepest', 'Molloy Deep, about 5.6 km']],
+      note: 'The smallest and shallowest ocean, mostly covered by sea ice that shrinks each summer. North America, Greenland, Europe and Asia almost enclose it.' },
+
+    { name: 'Mediterranean Sea', type: 'sea', anchors: [[34.5, 18]], view: [35, 18, 5], kmin: 2.4, rows: [['area', 'about 2.5 million km²']],
+      note: 'Almost enclosed by Europe, Africa and Asia. It joins the Atlantic through the Strait of Gibraltar, about 14 km wide at its narrowest. Heavy evaporation makes it saltier than the Atlantic.' },
+    { name: 'Caribbean Sea', type: 'sea', anchors: [[15, -75]], view: [15, -75, 5.5], kmin: 2.4, rows: [['area', 'about 2.75 million km²']],
+      note: 'Bordered by Central America, South America and the Antilles. Warm water, coral reefs and a hurricane season from June to November define it.' },
+    { name: 'Gulf of Mexico', type: 'sea', anchors: [[25, -90]], view: [25, -90, 6], kmin: 2.6, rows: [['area', 'about 1.6 million km²']],
+      note: 'Its Loop Current feeds the Gulf Stream, which carries warm water across the North Atlantic.' },
+    { name: 'Hudson Bay', type: 'sea', anchors: [[60, -85]], view: [60, -85, 5], kmin: 2.4, rows: [['area', 'about 1.2 million km²']],
+      note: 'A large inland sea in northern Canada that freezes over each winter. Polar bears and belugas live around it.' },
+    { name: 'Bering Sea', type: 'sea', anchors: [[58, -176]], view: [58, -176, 4.2], kmin: 2.4, rows: [['area', 'about 2.3 million km²']],
+      note: 'Joins the Pacific to the Arctic through the Bering Strait, roughly 85 km wide. Much of it freezes over in winter.' },
+    { name: 'North Sea', type: 'sea', anchors: [[56, 3]], view: [56, 3, 9], kmin: 3.8, rows: [['area', 'about 0.57 million km²']],
+      note: 'A shallow shelf sea between Great Britain and the European mainland, averaging under 100 m deep. It carries heavy shipping and supports fishing, offshore oil and gas, and wind farms.' },
+    { name: 'Baltic Sea', type: 'sea', anchors: [[58.5, 19.5]], view: [58.5, 19.5, 8], kmin: 4.2, rows: [['area', 'about 0.38 million km²']],
+      note: 'Brackish and almost enclosed, reached from the Atlantic only through the narrow Danish straits. Its low salinity lets freshwater and saltwater species live together.' },
+    { name: 'Black Sea', type: 'sea', anchors: [[43.3, 34.5]], view: [43.5, 34, 9], kmin: 4.4, rows: [['area', 'about 0.44 million km²']],
+      note: 'Joined to the Mediterranean by the Bosporus. Below roughly 150 m its water holds almost no oxygen.' },
+    { name: 'Caspian Sea', type: 'sea', anchors: [[41.2, 50.6]], view: [41.5, 50.5, 9], kmin: 5, rows: [['area', 'about 0.37 million km²']],
+      note: 'The largest inland body of water on Earth, about 28 m below sea level and mildly salty. Russia, Kazakhstan, Turkmenistan, Iran and Azerbaijan border it.' },
+    { name: 'Red Sea', type: 'sea', anchors: [[20.5, 38.3]], view: [21, 38, 6.5], kmin: 3.8, rows: [['area', 'about 0.44 million km²']],
+      note: 'A young rift where the African and Arabian plates are pulling apart. The Suez Canal links its north end to the Mediterranean.' },
+    { name: 'Arabian Sea', type: 'sea', anchors: [[15, 65]], view: [15, 64, 5], kmin: 2.4, rows: [['area', 'about 3.9 million km²']],
+      note: 'The northwest Indian Ocean, between India and the Arabian Peninsula. Summer monsoon winds drive strong upwelling along its western side.' },
+    { name: 'Bay of Bengal', type: 'sea', anchors: [[14, 88.5]], view: [14, 88, 6], kmin: 2.4, rows: [['area', 'about 2.2 million km²']],
+      note: 'The largest bay in the world by area. The Ganges, Brahmaputra and Irrawaddy empty into it, and it breeds many of the cyclones that strike South Asia.' },
+    { name: 'South China Sea', type: 'sea', anchors: [[13, 113]], view: [13, 113, 5.5], kmin: 2.4, rows: [['area', 'about 3.5 million km²']],
+      note: 'A marginal sea of the western Pacific and one of the busiest shipping routes. Several countries claim parts of it.' },
+    { name: 'Sea of Japan', type: 'sea', anchors: [[40, 135]], view: [40, 135, 8], kmin: 3.4, rows: [['area', 'about 1.0 million km²']],
+      note: 'Lies between Japan and the Asian mainland. Korea calls it the East Sea.' },
+    { name: 'Tasman Sea', type: 'sea', anchors: [[-38, 160]], view: [-38, 160, 5], kmin: 2.4, rows: [],
+      note: 'The part of the South Pacific between Australia and New Zealand, roughly 2,000 km across.' },
+    { name: 'Coral Sea', type: 'sea', anchors: [[-16.5, 152.5]], view: [-16, 152, 6], kmin: 2.8, rows: [['area', 'about 4.8 million km²']],
+      note: 'Off Australia’s northeast coast, bordered by the Great Barrier Reef. Much of it is a marine park, and it was the site of a naval battle in 1942.' }
+  ];
+  WATER.forEach(function (w) {
+    w.kind = 'w'; w.kmin = w.kmin || 0; w.kmax = w.type === 'ocean' ? 7 : 40;
+    w.label = w.type === 'ocean' ? w.name.toUpperCase() : w.name;
+    w.pts = w.anchors.map(function (a) { return proj([a[1], a[0]]); });
+    w.vpt = proj([w.view[1], w.view[0]]);
+    w.tag = w.type === 'ocean' ? 'ocean' : (/Bay|Gulf/.test(w.name) ? 'bay' : 'sea');
+  });
+
+  /* ---------- per-country data ---------- */
+  var items = feats.map(function (f) {
+    var key = f.id !== undefined ? String(f.id) : f.properties.name;
+    var m = META[key] || { name: f.properties.name, status: 'other', stext: '' };
+    var polys = f.geometry.type === 'Polygon' ? [f.geometry.coordinates] : f.geometry.coordinates;
+    var areas = polys.map(function (c) { return d3.geoArea({ type: 'Polygon', coordinates: c }); });
+    var maxA = Math.max.apply(null, areas), mi = areas.indexOf(maxA);
+    var c = path.centroid({ type: 'Polygon', coordinates: polys[mi] });
+    var x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    polys.forEach(function (p, i) {
+      if (areas[i] < maxA * 0.2) return;
+      var b = path.bounds({ type: 'Polygon', coordinates: p });
+      if (isFinite(b[0][0])) { x0 = Math.min(x0, b[0][0]); y0 = Math.min(y0, b[0][1]); x1 = Math.max(x1, b[1][0]); y1 = Math.max(y1, b[1][1]); }
+    });
+    var st = m.status || 'country';
+    var label, ls;
+    if (st === 'territory') { label = m.name + (m.sovIso ? ' (' + m.sovIso + ')' : ''); ls = 0.01; }
+    else if (st === 'disputed') { label = m.name + '*'; ls = 0.01; }
+    else { label = m.name.toUpperCase(); ls = 0.05; }
+    return {
+      kind: 'c', f: f, name: m.name || f.properties.name, cap: m.cap || null, ll: m.ll || null, region: m.region || '', rkey: RKEY[m.region] || '',
+      rkey2: m.iso === 'RU' ? 'asia' : m.iso === 'TR' ? 'europe' : '',
+      note: m.note || '', iso: m.iso || '', alt: m.alt || [], status: st, stext: m.stext || '', sov: m.sov || '', sovIso: m.sovIso || '',
+      label: label, ls: ls,
+      x: c[0], y: c[1], bx0: x0, by0: y0, bx1: x1, by1: y1, area: maxA, pt: m.ll ? proj([m.ll[1], m.ll[0]]) : null,
+      nw: 60, cw: 40
+    };
+  });
+  var order = items.slice().sort(function (a, b) { return b.area - a.area; });
+  var nC = 0, nT = 0, nD = 0, nCaps = 0;
+  items.forEach(function (i) { if (i.status === 'country') nC++; else if (i.status === 'territory') nT++; else if (i.status === 'disputed') nD++; if (i.pt && i.cap) nCaps++; });
+  document.getElementById('lede').textContent = nC + ' countries, ' + nT + ' territories and ' + nD + ' disputed areas. Names and capitals fill in as you zoom. Pick a region to dim the rest, or select an ocean or sea for a short note.';
+
+  /* ---------- drawing ---------- */
+  var gZoom = svg.append('g');
+  var gBase = gZoom.append('g');
+  gBase.append('path').attr('class', 'sphere').attr('d', path({ type: 'Sphere' }));
+  gBase.append('path').attr('class', 'grat').attr('d', path(d3.geoGraticule10()));
+  var gC = gBase.append('g');
+  gC.selectAll('path').data(items).join('path')
+    .attr('class', function (d) { return 'country' + (d.region ? ' r-' + d.region : ''); })
+    .attr('d', function (d) { return path(d.f); })
+    .each(function (d) { d.pathEl = this; this.__it = d; });
+  var gH = gBase.append('g');
+  items.forEach(function (it) {
+    if (it.status === 'territory' || it.status === 'disputed') {
+      it.hatchEl = gH.append('path').attr('class', it.status === 'territory' ? 'hl' : 'dt').attr('d', path(it.f)).node();
+    }
+  });
+  var hatchPat = document.getElementById('hatch'), dotPat = document.getElementById('dots');
+
+  var labels = svg.append('g').attr('class', 'labels');
+  var gWater = labels.append('g'), gNames = labels.append('g'), gDots = labels.append('g'), gCaps = labels.append('g');
+  WATER.forEach(function (w) {
+    w.el = gWater.append('text').attr('class', 'wlabel ' + w.type).attr('visibility', 'hidden').text(w.label).node();
+    w.on = false;
+    w.el.addEventListener('click', function (e) { e.stopPropagation(); select(w); });
+  });
+  items.forEach(function (it) {
+    var cls = 'cname' + (it.status === 'territory' ? ' t' : it.status === 'disputed' ? ' d' : '');
+    it.nameCls = cls;
+    it.nameEl = gNames.append('text').attr('class', cls).attr('visibility', 'hidden').text(it.label).node();
+    if (it.pt && it.cap) {
+      it.dotEl = gDots.append('circle').attr('class', 'cdot' + (it.status === 'country' ? '' : ' ring')).attr('r', 3).attr('visibility', 'hidden').node();
+      it.capEl = gCaps.append('text').attr('class', 'ccap').attr('visibility', 'hidden').text(it.cap).node();
+    }
+    it.nameOn = false; it.dotOn = false; it.capOn = false;
+  });
+
+  /* ---------- text measurement ---------- */
+  var mctx = document.createElement('canvas').getContext('2d');
+  function measure() {
+    mctx.font = 'bold 10px ' + FONT;
+    items.forEach(function (it) { it.nw = mctx.measureText(it.label).width + it.label.length * it.ls * 10; });
+    mctx.font = 'italic 10px ' + FONT;
+    items.forEach(function (it) { if (it.cap) it.cw = mctx.measureText(it.cap).width; });
+    WATER.forEach(function (w) { w.w10 = mctx.measureText(w.label).width + w.label.length * (w.type === 'ocean' ? 3 : 0.8); });
+  }
+  measure();
+
+  /* ---------- sizing and zoom ---------- */
+  var size = { w: 1, h: 1 };
+  var base = { ox: 0, oy: 0, b: 1 };
+  var showNames = true, showCaps = true, showTerr = true, showWater = true;
+  var regionSet = {}, regionCount = 0;
+  var sel = null;
+  var metaEl = document.getElementById('meta');
+
+  var zoom = d3.zoom().scaleExtent([1, 90]).on('zoom', function (e) {
+    gZoom.attr('transform', e.transform);
+    var s = 1 / (e.transform.k * base.b);
+    hatchPat.setAttribute('patternTransform', 'rotate(45) scale(' + s + ')');
+    dotPat.setAttribute('patternTransform', 'scale(' + s + ')');
+    metaEl.textContent = e.transform.k.toFixed(1) + '×';
+    schedule();
+  });
+  svg.call(zoom).on('dblclick.zoom', null);
+
+  function resize() {
+    var r = stageEl.getBoundingClientRect();
+    var w = Math.max(200, Math.round(r.width)), h = Math.max(200, Math.round(r.height));
+    size.w = w; size.h = h;
+    base.b = Math.min(w / WW, h / WH);
+    base.ox = (w - WW * base.b) / 2;
+    base.oy = (h - WH * base.b) / 2;
+    svg.attr('viewBox', '0 0 ' + w + ' ' + h);
+    gBase.attr('transform', 'translate(' + base.ox + ',' + base.oy + ') scale(' + base.b + ')');
+    var pad = 90; /* lets you pan past the map edge so edge labels can be read */
+    zoom.extent([[0, 0], [w, h]]).translateExtent([[base.ox - pad, base.oy - pad], [base.ox + WW * base.b + pad, base.oy + WH * base.b + pad]]);
+    svg.call(zoom.transform, d3.zoomTransform(svgNode));
+    schedule();
+  }
+  if (window.ResizeObserver) {
+    var rt = 0;
+    new ResizeObserver(function () { clearTimeout(rt); rt = setTimeout(resize, 60); }).observe(stageEl);
+  } else { window.addEventListener('resize', resize); }
+
+  /* ---------- label layout: greedy, no overlaps ---------- */
+  var raf = 0;
+  function schedule() { if (!raf) raf = requestAnimationFrame(layout); }
+  function hit(list, x, y, w, h) {
+    for (var i = 0; i < list.length; i++) {
+      var r = list[i];
+      if (x < r[0] + r[2] && x + w > r[0] && y < r[1] + r[3] && y + h > r[1]) return true;
+    }
+    return false;
+  }
+  function setVis(el, on) { el.setAttribute('visibility', on ? 'visible' : 'hidden'); }
+  function filtering() { return regionCount > 0; }
+  function inRegion(it) { return !!(regionSet[it.rkey] || (it.rkey2 && regionSet[it.rkey2])); }
+  function allowed(it) {
+    if (it === sel) return true;
+    if (it.status === 'territory' && !showTerr) return false;
+    if (filtering() && !inRegion(it)) return false;
+    return true;
+  }
+
+  function placeWater(w, T, k, rects) {
+    var forced = w === sel, on = false;
+    if (forced || (showWater && !filtering() && k >= w.kmin && k <= w.kmax)) {
+      var fs = w.type === 'ocean' ? 12 : 10.5, ww = w.w10 * fs / 10;
+      var pts = forced ? [w.vpt] : w.pts;
+      for (var i = 0; i < pts.length; i++) {
+        var x = T.x + k * (base.ox + base.b * pts[i][0]), y = T.y + k * (base.oy + base.b * pts[i][1]);
+        if (x < ww / 2 - 10 || x > size.w - ww / 2 + 10 || y < 8 || y > size.h - 8) { if (!forced) continue; }
+        if (forced || !hit(rects, x - ww / 2 - 4, y - fs / 2 - 3, ww + 8, fs + 6)) {
+          on = true; rects.push([x - ww / 2 - 4, y - fs / 2 - 3, ww + 8, fs + 6]);
+          w.el.setAttribute('x', x.toFixed(1)); w.el.setAttribute('y', y.toFixed(1));
+          if (w.fs !== fs) { w.fs = fs; w.el.setAttribute('font-size', fs); }
+          break;
+        }
+      }
+    }
+    if (on !== w.on) { w.on = on; setVis(w.el, on); }
+    var c = 'wlabel ' + w.type + (forced ? ' sel' : '');
+    if (w.el.getAttribute('class') !== c) w.el.setAttribute('class', c);
+  }
+
+  function layout() {
+    raf = 0;
+    var T = d3.zoomTransform(svgNode), k = T.k, W = size.w, H = size.h;
+    var selC = sel && sel.kind === 'c' ? sel : null;
+    var seq = selC ? [selC].concat(order.filter(function (i) { return i !== selC; })) : order;
+    var dots = [], i, it;
+
+    /* pass 1: capital dots */
+    for (i = 0; i < seq.length; i++) {
+      it = seq[i];
+      if (!it.dotEl) continue;
+      var on = false;
+      if (allowed(it) && (showCaps || it === selC)) {
+        var px = T.x + k * (base.ox + base.b * it.pt[0]), py = T.y + k * (base.oy + base.b * it.pt[1]);
+        it.px = px; it.py = py;
+        if (px > -10 && px < W + 10 && py > -10 && py < H + 10) {
+          if (it === selC || !hit(dots, px - 5, py - 5, 10, 10)) { on = true; dots.push([px - 5, py - 5, 10, 10]); }
+        }
+        if (on) {
+          it.dotEl.setAttribute('cx', px.toFixed(1)); it.dotEl.setAttribute('cy', py.toFixed(1));
+          var rr = it === selC ? '5' : '3';
+          if (it.dotEl.getAttribute('r') !== rr) it.dotEl.setAttribute('r', rr);
+        }
+      }
+      if (on !== it.dotOn) { it.dotOn = on; setVis(it.dotEl, on); }
+      var dc = 'cdot' + (it.status === 'country' ? '' : ' ring') + (it === selC ? ' sel' : '');
+      if (it.dotEl.getAttribute('class') !== dc) it.dotEl.setAttribute('class', dc);
+    }
+
+    /* pass 2: oceans first, then names and capital labels, then seas */
+    var rects = dots.slice();
+    for (i = 0; i < WATER.length; i++) if (WATER[i].type === 'ocean') placeWater(WATER[i], T, k, rects);
+
+    for (i = 0; i < seq.length; i++) {
+      it = seq[i];
+      var isSel = it === selC;
+      var ok = allowed(it);
+
+      var nameOn = false;
+      if (ok && (showNames || isSel)) {
+        var nx = T.x + k * (base.ox + base.b * it.x), ny = T.y + k * (base.oy + base.b * it.y);
+        if (nx > -60 && nx < W + 60 && ny > -20 && ny < H + 20 && isFinite(it.bx0)) {
+          var sw = Math.max(it.bx1 - it.bx0, (it.by1 - it.by0) * 0.6) * base.b * k;
+          var fs = 9.5, nw = it.nw * fs / 10;
+          if (sw >= nw * 0.5 || isSel) {
+            var ratio = sw / nw;
+            if (ratio > 7) fs = 14; else if (ratio > 3.6) fs = 11.5;
+            nw = it.nw * fs / 10;
+            var offs = [0, -1.25 * fs, 1.25 * fs], chosen = -1;
+            for (var oi = 0; oi < offs.length; oi++) {
+              if (!hit(rects, nx - nw / 2 - 2, ny + offs[oi] - fs / 2 - 2, nw + 4, fs + 4)) { chosen = oi; break; }
+            }
+            if (chosen < 0 && isSel) chosen = 0;
+            if (chosen >= 0) {
+              nameOn = true;
+              rects.push([nx - nw / 2 - 2, ny + offs[chosen] - fs / 2 - 2, nw + 4, fs + 4]);
+              it.nameEl.setAttribute('x', nx.toFixed(1)); it.nameEl.setAttribute('y', (ny + offs[chosen]).toFixed(1));
+              if (it.nameFs !== fs) { it.nameFs = fs; it.nameEl.setAttribute('font-size', fs); }
+            }
+          }
+        }
+      }
+      if (nameOn !== it.nameOn) { it.nameOn = nameOn; setVis(it.nameEl, nameOn); }
+      var nc = it.nameCls + (isSel ? ' sel' : '');
+      if (it.nameEl.getAttribute('class') !== nc) it.nameEl.setAttribute('class', nc);
+
+      if (it.capEl) {
+        var capOn = false;
+        if (it.dotOn) {
+          var cfs = 10, cw = it.cw * cfs / 10, ch = cfs + 4;
+          var x = it.px, y = it.py;
+          var cands = [
+            [x + 7, y - ch / 2, 'start', x + 7],
+            [x - 7 - cw, y - ch / 2, 'end', x - 7],
+            [x - cw / 2, y - ch - 5, 'middle', x],
+            [x - cw / 2, y + 5, 'middle', x]
+          ];
+          var pick = null;
+          for (var ci = 0; ci < cands.length; ci++) {
+            if (!hit(rects, cands[ci][0] - 1, cands[ci][1], cw + 2, ch)) { pick = cands[ci]; break; }
+          }
+          if (!pick && isSel) pick = cands[0];
+          if (pick) {
+            capOn = true;
+            rects.push([pick[0] - 1, pick[1], cw + 2, ch]);
+            it.capEl.setAttribute('x', pick[3].toFixed(1));
+            it.capEl.setAttribute('y', (pick[1] + ch / 2).toFixed(1));
+            it.capEl.setAttribute('text-anchor', pick[2]);
+            if (!it.capFs) { it.capFs = cfs; it.capEl.setAttribute('font-size', cfs); }
+          }
+        }
+        if (capOn !== it.capOn) { it.capOn = capOn; setVis(it.capEl, capOn); }
+        var cc = isSel ? 'ccap sel' : 'ccap';
+        if (it.capEl.getAttribute('class') !== cc) it.capEl.setAttribute('class', cc);
+      }
+    }
+    for (i = 0; i < WATER.length; i++) if (WATER[i].type !== 'ocean') placeWater(WATER[i], T, k, rects);
+  }
+
+  /* ---------- regions: dim everything else ---------- */
+  function applyDim() {
+    var f = filtering();
+    items.forEach(function (it) {
+      var out = f && !inRegion(it);
+      it.pathEl.classList.toggle('dim', out);
+      if (it.hatchEl) it.hatchEl.classList.toggle('dim', out);
+    });
+    updateHead();
+  }
+  function applyTerrToggle() {
+    gH.attr('display', showTerr ? null : 'none');
+  }
+  function setRegions(keys, fly) {
+    regionSet = {}; regionCount = 0;
+    keys.forEach(function (k2) { regionSet[k2] = true; regionCount++; });
+    document.querySelectorAll('#regions .link').forEach(function (b) {
+      var r = b.getAttribute('data-region');
+      b.setAttribute('aria-pressed', r === 'all' ? String(regionCount === 0) : String(!!regionSet[r]));
+    });
+    applyDim();
+    if (fly !== false) {
+      if (!regionCount) { svg.transition().duration(reduceMotion ? 0 : 700).ease(d3.easeCubicInOut).call(zoom.transform, homeTransform()); }
+      else {
+        var X0 = Infinity, Y0 = Infinity, X1 = -Infinity, Y1 = -Infinity;
+        keys.forEach(function (k2) {
+          var bx = RBOX[k2], lons = [bx[0], (bx[0] + bx[2]) / 2, bx[2]], lats = [bx[1], (bx[1] + bx[3]) / 2, bx[3]];
+          lons.forEach(function (lo) { lats.forEach(function (la) { var p = proj([lo, la]); X0 = Math.min(X0, p[0]); X1 = Math.max(X1, p[0]); Y0 = Math.min(Y0, p[1]); Y1 = Math.max(Y1, p[1]); }); });
+        });
+        flyBox(X0, Y0, X1, Y1, 0.92, 12);
+      }
+    }
+    schedule();
+  }
+  document.getElementById('regions').addEventListener('click', function (e) {
+    var b = e.target.closest('.link'); if (!b) return;
+    var r = b.getAttribute('data-region');
+    if (r === 'all') { setRegions([]); return; }
+    var cur = Object.keys(regionSet);
+    var i = cur.indexOf(r);
+    if (i >= 0) cur.splice(i, 1); else cur.push(r);
+    setRegions(cur);
+  });
+
+  /* ---------- flying ---------- */
+  function flyBox(x0, y0, x1, y1, fill, maxK) {
+    var bw = Math.max((x1 - x0) * base.b, 1), bh = Math.max((y1 - y0) * base.b, 1);
+    var cx = base.ox + base.b * (x0 + x1) / 2, cy = base.oy + base.b * (y0 + y1) / 2;
+    var k = Math.max(1, Math.min(maxK || 60, fill * Math.min(size.w / bw, size.h / bh)));
+    var t = d3.zoomIdentity.translate(size.w / 2, size.h / 2).scale(k).translate(-cx, -cy);
+    svg.transition().duration(reduceMotion ? 0 : 900).ease(d3.easeCubicInOut).call(zoom.transform, t);
+  }
+  function flyTo(it) {
+    var x0 = it.bx0, y0 = it.by0, x1 = it.bx1, y1 = it.by1;
+    if (!isFinite(x0)) return;
+    if (it.pt) { x0 = Math.min(x0, it.pt[0]); x1 = Math.max(x1, it.pt[0]); y0 = Math.min(y0, it.pt[1]); y1 = Math.max(y1, it.pt[1]); }
+    flyBox(x0, y0, x1, y1, 0.7, 60);
+  }
+  function flyPoint(p, k) {
+    var cx = base.ox + base.b * p[0], cy = base.oy + base.b * p[1];
+    var t = d3.zoomIdentity.translate(size.w / 2, size.h / 2).scale(k).translate(-cx, -cy);
+    svg.transition().duration(reduceMotion ? 0 : 900).ease(d3.easeCubicInOut).call(zoom.transform, t);
+  }
+  function homeTransform() {
+    if (size.w < 560) {
+      var c = proj([20, 22]);
+      var cx = base.ox + base.b * c[0], cy = base.oy + base.b * c[1];
+      return d3.zoomIdentity.translate(size.w / 2, size.h * 0.5).scale(2.4).translate(-cx, -cy);
+    }
+    return d3.zoomIdentity;
+  }
+
+  /* ---------- selection and readout ---------- */
+  var hintEl = document.getElementById('hint'), roEl = document.getElementById('readout'), noteEl = document.getElementById('note');
+  var titleEl = document.getElementById('viewTitle'), tagEl = document.getElementById('viewTag');
+  function fmtLL(ll) {
+    var la = ll[0], lo = ll[1];
+    return Math.abs(la).toFixed(2) + '° ' + (la >= 0 ? 'N' : 'S') + ', ' + Math.abs(lo).toFixed(2) + '° ' + (lo >= 0 ? 'E' : 'W');
+  }
+  function statusTag(it) {
+    if (it.status === 'territory') return it.sov ? 'territory · ' + it.sov.replace(/^the /, '') : 'territory';
+    if (it.status === 'disputed') return 'disputed';
+    if (it.status === 'other') return 'no sovereign state';
+    return '';
+  }
+  function updateHead() {
+    var t = '', tag = '', alert = false;
+    if (sel) {
+      t = sel.name;
+      if (sel.kind === 'c') { tag = statusTag(sel); alert = !!tag; } else tag = sel.tag;
+    } else if (filtering()) { t = Object.keys(regionSet).map(function (k2) { return RNAME[k2]; }).join(' + '); }
+    else t = 'world';
+    titleEl.textContent = t;
+    tagEl.hidden = !tag; tagEl.textContent = tag ? '[' + tag + ']' : '';
+    tagEl.classList.toggle('alert', alert);
+  }
+  function setRows(rows, flagFirst) {
+    roEl.textContent = '';
+    rows.forEach(function (r, i) {
+      var li = document.createElement('li');
+      var k2 = document.createElement('span'); k2.className = 'k'; k2.textContent = r[0];
+      var v = document.createElement('span'); v.className = 'v' + (flagFirst && i === 0 ? ' flag' : ''); v.textContent = r[1];
+      li.appendChild(k2); li.appendChild(v); roEl.appendChild(li);
+    });
+    roEl.hidden = false; hintEl.hidden = true;
+  }
+  function showDetail(it) {
+    if (it.kind === 'w') {
+      setRows([['type', it.type === 'ocean' ? 'ocean' : it.tag]].concat(it.rows));
+      noteEl.textContent = it.note;
+    } else {
+      var rows = [];
+      var notC = it.status !== 'country';
+      rows.push(['status', it.stext || '–']);
+      rows.push(['capital', it.cap || 'none listed']);
+      if (it.ll) rows.push(['location', fmtLL(it.ll)]);
+      if (it.region) rows.push(['region', RNAME[it.rkey] || it.region.toLowerCase()]);
+      setRows(rows, notC);
+      noteEl.textContent = it.note;
+    }
+    updateHead();
+  }
+  function clearSel() {
+    if (sel && sel.pathEl) sel.pathEl.classList.remove('sel');
+    sel = null;
+    roEl.hidden = true; hintEl.hidden = false; noteEl.textContent = '';
+    updateHead(); schedule();
+  }
+  function select(it, fly) {
+    if (sel && sel !== it && sel.pathEl) sel.pathEl.classList.remove('sel');
+    sel = it;
+    if (it.kind === 'c') { it.pathEl.classList.add('sel'); it.pathEl.parentNode.appendChild(it.pathEl); }
+    showDetail(it);
+    if (fly !== false) { if (it.kind === 'c') flyTo(it); else flyPoint(it.vpt, it.view[2]); }
+    schedule();
+  }
+  gC.selectAll('path').on('click', function (e, d) { select(d); });
+  svg.on('click', function (e) { if (!e.target.classList.contains('country') && sel) clearSel(); });
+
+  /* ---------- hover tip (mouse only) ---------- */
+  var tip = document.getElementById('tip');
+  svg.on('pointermove', function (e) {
+    var t = e.target;
+    if (e.pointerType !== 'mouse' || e.buttons || !t.__it) { tip.hidden = true; return; }
+    var it = t.__it;
+    tip.textContent = '';
+    var b = document.createElement('b'); b.textContent = it.name; tip.appendChild(b);
+    var extra = it.status === 'territory' ? it.stext : it.status === 'disputed' ? 'disputed' : '';
+    if (extra) { var sp = document.createElement('span'); sp.textContent = '  ' + extra; tip.appendChild(sp); }
+    else if (it.cap) { var em = document.createElement('em'); em.textContent = '  ' + it.cap; tip.appendChild(em); }
+    tip.hidden = false;
+    var tw = tip.offsetWidth, th = tip.offsetHeight;
+    var x = e.clientX + 14, y = e.clientY + 16;
+    if (x + tw > window.innerWidth - 8) x = e.clientX - tw - 14;
+    if (y + th > window.innerHeight - 8) y = e.clientY - th - 12;
+    tip.style.left = Math.max(4, x) + 'px'; tip.style.top = Math.max(4, y) + 'px';
+  }).on('pointerleave', function () { tip.hidden = true; });
+
+  /* ---------- controls ---------- */
+  function zoomBy(f) { svg.transition().duration(reduceMotion ? 0 : 260).call(zoom.scaleBy, f); }
+  document.getElementById('z-in').addEventListener('click', function () { zoomBy(1.8); });
+  document.getElementById('z-out').addEventListener('click', function () { zoomBy(1 / 1.8); });
+  document.getElementById('z-home').addEventListener('click', function () {
+    clearSel();
+    svg.transition().duration(reduceMotion ? 0 : 700).ease(d3.easeCubicInOut).call(zoom.transform, homeTransform());
+  });
+  function toggle(id, setter) {
+    var b = document.getElementById(id);
+    b.addEventListener('click', function () {
+      var on = b.getAttribute('aria-pressed') !== 'true';
+      b.setAttribute('aria-pressed', String(on)); setter(on); schedule();
+    });
+  }
+  toggle('l-names', function (v) { showNames = v; });
+  toggle('l-caps', function (v) { showCaps = v; });
+  toggle('l-terr', function (v) { showTerr = v; applyTerrToggle(); });
+  toggle('l-water', function (v) { showWater = v; });
+
+  var oceansEl = document.getElementById('oceans');
+  WATER.filter(function (w) { return w.type === 'ocean'; }).forEach(function (w) {
+    var li = document.createElement('li'), b = document.createElement('button');
+    b.className = 'link'; b.type = 'button'; b.textContent = w.name.replace(' Ocean', '').toLowerCase();
+    b.style.color = 'var(--muted)';
+    b.addEventListener('click', function () { select(w); });
+    li.appendChild(b); oceansEl.appendChild(li);
+  });
+
+  svgNode.addEventListener('keydown', function (e) {
+    var k = d3.zoomTransform(svgNode).k, step = 90 / k, key = e.key;
+    if (key === '+' || key === '=') zoomBy(1.6);
+    else if (key === '-' || key === '_') zoomBy(1 / 1.6);
+    else if (key === '0') document.getElementById('z-home').click();
+    else if (key === 'ArrowLeft') svg.call(zoom.translateBy, step, 0);
+    else if (key === 'ArrowRight') svg.call(zoom.translateBy, -step, 0);
+    else if (key === 'ArrowUp') svg.call(zoom.translateBy, 0, step);
+    else if (key === 'ArrowDown') svg.call(zoom.translateBy, 0, -step);
+    else if (key === 'Escape') clearSel();
+    else return;
+    e.preventDefault();
+  });
+
+  /* ---------- search ---------- */
+  function norm(s) { return (s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase(); }
+  var all = items.concat(WATER);
+  all.forEach(function (it) {
+    it.k = { name: norm(it.name), cap: norm(it.cap), alt: (it.alt || []).map(norm).concat([norm(it.iso)]) };
+  });
+  var q = document.getElementById('q'), list = document.getElementById('found');
+  var results = [], active = -1;
+  function closeList() { list.hidden = true; q.setAttribute('aria-expanded', 'false'); q.removeAttribute('aria-activedescendant'); active = -1; }
+  function setActive(n) {
+    var lis = list.querySelectorAll('li[role="option"]');
+    lis.forEach(function (li, i) { li.setAttribute('aria-selected', i === n ? 'true' : 'false'); });
+    active = n;
+    if (n >= 0 && lis[n]) { q.setAttribute('aria-activedescendant', lis[n].id); lis[n].scrollIntoView({ block: 'nearest' }); }
+    else q.removeAttribute('aria-activedescendant');
+  }
+  function rightText(it) {
+    if (it.kind === 'w') return it.tag;
+    var t = it.status === 'territory' ? 'territory' : it.status === 'disputed' ? 'disputed' : '';
+    return (it.cap ? it.cap : '') + (it.cap && t ? ' · ' : '') + t;
+  }
+  function runSearch() {
+    var s = norm(q.value.trim());
+    if (!s) { closeList(); return; }
+    var scored = [];
+    all.forEach(function (it) {
+      var sc2 = 99;
+      if (it.k.name.indexOf(s) === 0) sc2 = 0;
+      else if (it.k.cap && it.k.cap.indexOf(s) === 0) sc2 = 1;
+      else if (it.k.name.indexOf(' ' + s) >= 0 || (it.k.cap && it.k.cap.indexOf(' ' + s) >= 0)) sc2 = 2;
+      else if (it.k.name.indexOf(s) >= 0 || (it.k.cap && it.k.cap.indexOf(s) >= 0)) sc2 = 3;
+      else if (it.k.alt.some(function (a) { return a && a.indexOf(s) === 0; })) sc2 = 4;
+      else if (it.k.alt.some(function (a) { return a && a.indexOf(s) >= 0; })) sc2 = 5;
+      if (sc2 < 99) scored.push([sc2, it]);
+    });
+    scored.sort(function (a, b) { return a[0] - b[0] || a[1].name.localeCompare(b[1].name); });
+    results = scored.slice(0, 8).map(function (x) { return x[1]; });
+    list.textContent = '';
+    if (!results.length) {
+      var none = document.createElement('li'); none.className = 'none'; none.textContent = 'no match for "' + q.value.trim() + '"';
+      list.appendChild(none);
+    } else {
+      results.forEach(function (it, i) {
+        var li = document.createElement('li');
+        li.setAttribute('role', 'option'); li.id = 'opt-' + i; li.setAttribute('aria-selected', 'false');
+        var n = document.createElement('span'); n.className = 'n'; n.textContent = it.name;
+        var c = document.createElement('span'); c.className = 'c'; c.textContent = rightText(it);
+        li.appendChild(n); li.appendChild(c);
+        li.addEventListener('pointerdown', function (e) { e.preventDefault(); });
+        li.addEventListener('click', function () { choose(it); });
+        list.appendChild(li);
+      });
+    }
+    list.hidden = false; q.setAttribute('aria-expanded', 'true');
+    setActive(results.length ? 0 : -1);
+  }
+  function choose(it) { q.value = ''; closeList(); q.blur(); select(it); }
+  q.addEventListener('input', runSearch);
+  q.addEventListener('focus', function () { if (q.value.trim()) runSearch(); });
+  q.addEventListener('blur', function () { setTimeout(closeList, 120); });
+  q.addEventListener('keydown', function (e) {
+    if (e.key === 'ArrowDown') { if (!list.hidden && results.length) setActive((active + 1) % results.length); e.preventDefault(); }
+    else if (e.key === 'ArrowUp') { if (!list.hidden && results.length) setActive((active - 1 + results.length) % results.length); e.preventDefault(); }
+    else if (e.key === 'Enter') { if (!list.hidden && results[active]) choose(results[active]); e.preventDefault(); }
+    else if (e.key === 'Escape') { if (!list.hidden) closeList(); else { q.value = ''; q.blur(); } }
+  });
+
+  /* ---------- start ---------- */
+  resize();
+  svg.call(zoom.transform, homeTransform());
+  updateHead();
+})();
+</script>
+</body>
+</html>

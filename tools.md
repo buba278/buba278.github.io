@@ -14,4 +14,7 @@ live compass, step trace and dead-reckoning trail for an st sensortile, over blu
 
 needs chrome or edge for bluetooth and serial.
 
+### [world atlas](/tools/atlas/)
+zoomable world map with every country, territory and capital labelled. pick a region to dim the rest, and select an ocean or sea for a short note. territories and disputed areas are marked so they don't read as countries.
+
 </div>

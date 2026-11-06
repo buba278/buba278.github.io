@@ -3,7 +3,20 @@ layout: default
 title: tools
 ---
 
-<div class="page-content-wrapper">
+<style>
+.tools-back { display: inline-block; color: #777; }
+.tools-page h1 { font-size: 2.2em; margin-top: .6em; padding-bottom: .3em; border-bottom: 1px solid #d2d2d2; }
+.tools-page h3 { font-size: 1.05em; margin-top: 2em; }
+.tools-page h3 a { text-decoration: underline; text-underline-offset: 3px; }
+@media (prefers-color-scheme: dark) {
+    .tools-back { color: #888; }
+    .tools-page h1 { border-bottom-color: #474747; }
+}
+</style>
+
+<div class="page-content-wrapper tools-page">
+
+<a class="tools-back" href="/">← home</a>
 
 # tools
 

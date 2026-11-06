@@ -143,7 +143,7 @@ main { flex: 1; min-width: 0; }
 .pat-line { stroke: var(--fg); stroke-width: 1; stroke-opacity: .32; }
 .pat-dot { fill: var(--fg); fill-opacity: .55; }
 
-.tdot { fill: var(--fg); fill-opacity: .6; stroke: var(--bord); stroke-width: .6px; }
+.tdot { fill: var(--fg); fill-opacity: var(--tdo, .6); stroke: var(--bord); stroke-width: .6px; }
 .fsbar { display: none; position: absolute; top: 10px; left: 12px; right: 12px; justify-content: space-between; align-items: flex-start; gap: 1em; pointer-events: none; }
 .fsbar > * { pointer-events: auto; background: var(--bg); border: 1px solid var(--line); border-radius: 3px; padding: 1px 9px; }
 .fsbar .fsctl { display: flex; gap: 1.2em; color: var(--muted); }
@@ -226,25 +226,20 @@ main { flex: 1; min-width: 0; }
     <div class="group">
       <h2>labels</h2>
       <ul class="opts">
-        <li><button class="link" id="l-names" aria-pressed="true"><span class="dot"></span>names</button></li>
-        <li><button class="link" id="l-caps" aria-pressed="true"><span class="dot"></span>capitals</button></li>
+        <li><button class="link" data-labels="full" aria-pressed="true"><span class="dot"></span>names + capitals</button></li>
+        <li><button class="link" data-labels="names" aria-pressed="false"><span class="dot"></span>names</button></li>
+        <li><button class="link" data-labels="hidden" aria-pressed="false"><span class="dot"></span>hidden</button></li>
         <li><button class="link" id="l-terr" aria-pressed="true"><span class="dot"></span>territories</button></li>
-        <li><button class="link" id="l-water" aria-pressed="true"><span class="dot"></span>oceans</button></li>
       </ul>
     </div>
     <div class="group">
       <h2>key</h2>
       <ul class="key">
         <li><span class="fill"></span>capital</li>
-        <li><span class="ring"></span>territory capital</li>
-        <li><span class="sw t"></span>territory (DK = owner)</li>
+        <li><span class="sw t"></span>territory</li>
         <li><span class="sw d"></span>disputed*</li>
         <li><span class="sw n"></span>no state</li>
       </ul>
-    </div>
-    <div class="group">
-      <h2>oceans</h2>
-      <ul class="opts" id="oceans"></ul>
     </div>
   </aside>
 
@@ -458,7 +453,7 @@ main { flex: 1; min-width: 0; }
   /* ---------- sizing and zoom ---------- */
   var size = { w: 1, h: 1 };
   var base = { ox: 0, oy: 0, b: 1 };
-  var showNames = true, showCaps = true, showTerr = true, showWater = true;
+  var showNames = true, showCaps = true, showTerr = true, showWater = true, dotsOnly = false;
   var regionSet = {}, regionCount = 0;
   var sel = null;
   var metaEl = document.getElementById('meta');
@@ -494,7 +489,7 @@ main { flex: 1; min-width: 0; }
   } else { window.addEventListener('resize', resize); }
 
   /* ---------- label layout: greedy, no overlaps ---------- */
-  var raf = 0;
+  var raf = 0, lastDr = 0, lastDop = 0;
   function schedule() { if (!raf) raf = requestAnimationFrame(layout); }
   function hit(list, x, y, w, h) {
     for (var i = 0; i < list.length; i++) {
@@ -515,7 +510,7 @@ main { flex: 1; min-width: 0; }
 
   function placeWater(w, T, k, rects) {
     var forced = w === sel, on = false;
-    if (forced || (showWater && !filtering() && k >= w.kmin && k <= w.kmax)) {
+    if (forced || (showWater && !dotsOnly && k >= w.kmin && k <= w.kmax)) {
       var fs = w.type === 'ocean' ? 12 : 10.5, ww = w.w10 * fs / 10;
       var pts = forced ? [w.vpt] : w.pts;
       for (var i = 0; i < pts.length; i++) {
@@ -546,7 +541,7 @@ main { flex: 1; min-width: 0; }
       it = seq[i];
       if (!it.dotEl) continue;
       var on = false;
-      if (allowed(it) && (showCaps || it === selC)) {
+      if (allowed(it) && ((showCaps && !dotsOnly) || it === selC)) {
         var px = T.x + k * (base.ox + base.b * it.pt[0]), py = T.y + k * (base.oy + base.b * it.pt[1]);
         it.px = px; it.py = py;
         if (px > -10 && px < W + 10 && py > -10 && py < H + 10) {
@@ -573,7 +568,7 @@ main { flex: 1; min-width: 0; }
       var ok = allowed(it);
 
       var nameOn = false;
-      if (ok && (showNames || isSel)) {
+      if (ok && ((showNames && !dotsOnly) || isSel)) {
         var nx = T.x + k * (base.ox + base.b * it.x), ny = T.y + k * (base.oy + base.b * it.y);
         if (nx > -60 && nx < W + 60 && ny > -20 && ny < H + 20 && isFinite(it.bx0)) {
           var sw = Math.max(it.bx1 - it.bx0, (it.by1 - it.by0) * 0.6) * base.b * k;
@@ -583,12 +578,14 @@ main { flex: 1; min-width: 0; }
             if (ratio > 7) fs = 14; else if (ratio > 3.6) fs = 11.5;
             nw = it.nw * fs / 10;
             var offs = [0, -1.25 * fs, 1.25 * fs], chosen = -1;
-            for (var oi = 0; oi < offs.length; oi++) {
+            var tryOrd = it.lastOi ? [it.lastOi, 0, 3 - it.lastOi] : [0, 1, 2];
+            for (var ti = 0; ti < 3; ti++) {
+              var oi = tryOrd[ti];
               if (!hit(rects, nx - nw / 2 - 2, ny + offs[oi] - fs / 2 - 2, nw + 4, fs + 4)) { chosen = oi; break; }
             }
             if (chosen < 0 && isSel) chosen = 0;
             if (chosen >= 0) {
-              nameOn = true;
+              nameOn = true; it.lastOi = chosen;
               rects.push([nx - nw / 2 - 2, ny + offs[chosen] - fs / 2 - 2, nw + 4, fs + 4]);
               it.nameEl.setAttribute('x', nx.toFixed(1)); it.nameEl.setAttribute('y', (ny + offs[chosen]).toFixed(1));
               if (it.nameFs !== fs) { it.nameFs = fs; it.nameEl.setAttribute('font-size', fs); }
@@ -632,20 +629,38 @@ main { flex: 1; min-width: 0; }
     }
     for (i = 0; i < WATER.length; i++) if (WATER[i].type !== 'ocean') placeWater(WATER[i], T, k, rects);
 
-    /* pass 3: a tiny dot for every country that has no name or capital dot showing, so none go missing */
-    var tiny = [];
+    /* pass 3: a dot for every country with no name or capital dot showing, so none go missing.
+       In hidden mode every country gets one, sized to the tightest clumps in view and made see-through so overlaps show. */
+    var tiny = [], cand = [];
     for (i = 0; i < seq.length; i++) {
       it = seq[i];
       var tOn = false;
-      if (showNames && allowed(it) && !it.nameOn && !it.dotOn && isFinite(it.x)) {
+      if ((showNames || dotsOnly) && allowed(it) && !it.nameOn && !it.dotOn && isFinite(it.x)) {
         var tx = T.x + k * (base.ox + base.b * it.x), ty = T.y + k * (base.oy + base.b * it.y);
-        if (tx > -4 && tx < W + 4 && ty > -4 && ty < H + 4 && !hit(tiny, tx - 1.5, ty - 1.5, 3, 3)) {
-          tOn = true; tiny.push([tx - 1.5, ty - 1.5, 3, 3]);
+        if (tx > -4 && tx < W + 4 && ty > -4 && ty < H + 4 && (dotsOnly || !hit(tiny, tx - 1.5, ty - 1.5, 3, 3))) {
+          tOn = true; tiny.push([tx - 1.5, ty - 1.5, 3, 3]); cand.push([tx, ty]);
           it.tinyEl.setAttribute('cx', tx.toFixed(1)); it.tinyEl.setAttribute('cy', ty.toFixed(1));
         }
       }
       if (tOn !== it.tinyOn) { it.tinyOn = tOn; setVis(it.tinyEl, tOn); }
     }
+    var dr = 1.7, dop = 0.6;
+    if (dotsOnly && cand.length > 1) {
+      var nn = cand.map(function (a, ai) {
+        var m2 = Infinity;
+        for (var bi = 0; bi < cand.length; bi++) {
+          if (bi === ai) continue;
+          var dx = a[0] - cand[bi][0], dy = a[1] - cand[bi][1], d2 = dx * dx + dy * dy;
+          if (d2 < m2) m2 = d2;
+        }
+        return Math.sqrt(m2);
+      }).sort(function (a, b) { return a - b; });
+      var q10 = nn[Math.floor(nn.length * 0.1)];
+      dr = Math.max(1.6, Math.min(6, q10 * 0.45));
+      dop = 0.5 + 0.35 * (dr - 1.6) / 4.4;
+    }
+    if (dr !== lastDr) { lastDr = dr; items.forEach(function (x) { x.tinyEl.setAttribute('r', dr.toFixed(2)); }); }
+    if (dop !== lastDop) { lastDop = dop; gTiny.node().style.setProperty('--tdo', dop.toFixed(2)); }
   }
 
   /* ---------- regions: dim everything else ---------- */
@@ -792,7 +807,7 @@ main { flex: 1; min-width: 0; }
   var tip = document.getElementById('tip');
   svg.on('pointermove', function (e) {
     var t = e.target;
-    if (e.pointerType !== 'mouse' || e.buttons || !t.__it) { tip.hidden = true; return; }
+    if (dotsOnly || e.pointerType !== 'mouse' || e.buttons || !t.__it) { tip.hidden = true; return; }
     var it = t.__it;
     tip.textContent = '';
     var b = document.createElement('b'); b.textContent = it.name; tip.appendChild(b);
@@ -842,19 +857,16 @@ main { flex: 1; min-width: 0; }
       b.setAttribute('aria-pressed', String(on)); setter(on); schedule();
     });
   }
-  toggle('l-names', function (v) { showNames = v; });
-  toggle('l-caps', function (v) { showCaps = v; });
-  toggle('l-terr', function (v) { showTerr = v; applyTerrToggle(); });
-  toggle('l-water', function (v) { showWater = v; });
-
-  var oceansEl = document.getElementById('oceans');
-  WATER.filter(function (w) { return w.type === 'ocean'; }).forEach(function (w) {
-    var li = document.createElement('li'), b = document.createElement('button');
-    b.className = 'link'; b.type = 'button'; b.textContent = w.name.replace(' Ocean', '').toLowerCase();
-    b.style.color = 'var(--muted)';
-    b.addEventListener('click', function () { select(w); });
-    li.appendChild(b); oceansEl.appendChild(li);
+  document.querySelectorAll('[data-labels]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      var m = b.getAttribute('data-labels');
+      showNames = m !== 'hidden'; showCaps = m === 'full'; showWater = m !== 'hidden'; dotsOnly = m === 'hidden';
+      document.querySelectorAll('[data-labels]').forEach(function (o) { o.setAttribute('aria-pressed', String(o === b)); });
+      if (dotsOnly) tip.hidden = true;
+      schedule();
+    });
   });
+  toggle('l-terr', function (v) { showTerr = v; applyTerrToggle(); });
 
   svgNode.addEventListener('keydown', function (e) {
     var k = d3.zoomTransform(svgNode).k, step = 90 / k, key = e.key;
